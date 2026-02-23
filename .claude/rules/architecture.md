@@ -85,6 +85,16 @@ workspace/                      Default workspace files copied on `onboard`
 
 See [agent-architecture.md](agent-architecture.md) for data flow, bus message types, and direct processing.
 
+See [subagent-architecture.md](subagent-architecture.md) for subagent spawning, isolation, and result delivery.
+
+See [session-architecture.md](session-architecture.md) for JSONL file format, session keys, memory consolidation, and caching.
+
+See [cron-architecture.md](cron-architecture.md) for schedule kinds, timezone support, persistence, and job lifecycle.
+
+See [heartbeat-architecture.md](heartbeat-architecture.md) for the periodic background check, HEARTBEAT.md format, and active-task detection.
+
+See [gateway-architecture.md](gateway-architecture.md) for the full startup sequence, message flow, PID management, and concurrency model.
+
 ## Key interfaces
 
 | Interface | File | Purpose |

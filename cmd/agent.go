@@ -62,10 +62,10 @@ func runAgent(_ *cobra.Command, _ []string) error {
 	msgBus := bus.NewMessageBus(100)
 
 	cronPath := config.DataDir() + "/cron/jobs.json"
-	cronSvc := cron.NewService(cronPath)
+	cronMgr := cron.NewService(cronPath)
 
 	loop := agent.NewAgentLoop(msgBus, provider, cfg, "")
-	loop.SetCronTool(cronSvc)
+	loop.SetCronTool(cronMgr)
 
 	sessionKey := agentSession
 	channel, chatID := parseSessionKey(sessionKey)
@@ -166,9 +166,11 @@ func parseSessionKey(key string) (channel, chatID string) {
 func buildProvider(cfg *config.Config) (providers.LLMProvider, error) {
 	model := cfg.Agents.Defaults.Model
 	result := cfg.MatchProvider(model)
+
 	if result.Provider == nil && !isOAuthProvider(result.Name) {
 		return nil, fmt.Errorf("no API key configured for model %q — edit %s", model, config.ConfigPath())
 	}
+
 	apiKey := ""
 	apiBase := ""
 	var extraHeaders map[string]string

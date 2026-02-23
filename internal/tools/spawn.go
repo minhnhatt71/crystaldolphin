@@ -13,9 +13,9 @@ type Spawner interface {
 
 // SpawnTool spawns a background subagent to handle a task asynchronously.
 type SpawnTool struct {
-	spawner        Spawner
-	originChannel  string
-	originChatID   string
+	spawner       Spawner
+	originChannel string
+	originChatID  string
 }
 
 // NewSpawnTool creates a SpawnTool backed by the given Spawner.
@@ -33,12 +33,16 @@ func (t *SpawnTool) SetContext(channel, chatID string) {
 	t.originChatID = chatID
 }
 
+// Name of the tool
 func (t *SpawnTool) Name() string { return "spawn" }
+
 func (t *SpawnTool) Description() string {
 	return "Spawn a subagent to handle a task in the background. " +
 		"Use this for complex or time-consuming tasks that can run independently. " +
 		"The subagent will complete the task and report back when done."
 }
+
+// Parameters returns the JSON Schema for the tool's parameters.
 func (t *SpawnTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
@@ -56,6 +60,7 @@ func (t *SpawnTool) Parameters() json.RawMessage {
 	}`)
 }
 
+// Execute spawns a subagent with the given task and label, and returns immediately.
 func (t *SpawnTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	task, _ := params["task"].(string)
 	if task == "" {

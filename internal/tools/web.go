@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	webUserAgent   = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36"
-	maxRedirects   = 5
+	webUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36"
+	maxRedirects = 5
 )
 
 // validateURL checks that url is http(s) with a valid domain.
@@ -59,8 +59,10 @@ func NewWebSearchTool(apiKey string, maxResults int) *WebSearchTool {
 	}
 }
 
-func (t *WebSearchTool) Name() string        { return "web_search" }
-func (t *WebSearchTool) Description() string { return "Search the web. Returns titles, URLs, and snippets." }
+func (t *WebSearchTool) Name() string { return "web_search" }
+func (t *WebSearchTool) Description() string {
+	return "Search the web. Returns titles, URLs, and snippets."
+}
 func (t *WebSearchTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
@@ -171,6 +173,7 @@ func NewWebFetchTool(maxChars int) *WebFetchTool {
 	if maxChars <= 0 {
 		maxChars = 50000
 	}
+
 	client := &http.Client{
 		Timeout: 30 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {

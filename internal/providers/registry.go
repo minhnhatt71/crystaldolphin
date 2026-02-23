@@ -62,8 +62,6 @@ func (s ProviderSpec) Label() string {
 // ---------------------------------------------------------------------------
 
 var PROVIDERS = []ProviderSpec{
-
-	// === Custom (direct OpenAI-compatible endpoint) =========================
 	{
 		Name:        "custom",
 		Keywords:    nil,
@@ -71,8 +69,6 @@ var PROVIDERS = []ProviderSpec{
 		DisplayName: "Custom",
 		IsDirect:    true,
 	},
-
-	// === Gateways ===========================================================
 	{
 		Name:                  "openrouter",
 		Keywords:              []string{"openrouter"},
@@ -116,9 +112,6 @@ var PROVIDERS = []ProviderSpec{
 		DetectByBaseKeyword: "volces",
 		DefaultAPIBase:      "https://ark.cn-beijing.volces.com/api/v3",
 	},
-
-	// === Standard providers =================================================
-
 	{
 		Name:                  "anthropic",
 		Keywords:              []string{"anthropic", "claude"},
@@ -221,10 +214,6 @@ var PROVIDERS = []ProviderSpec{
 		SkipPrefixes:  []string{"groq/"},
 	},
 }
-
-// ---------------------------------------------------------------------------
-// Lookup helpers
-// ---------------------------------------------------------------------------
 
 // FindByModel matches a standard provider by model-name keyword (case-insensitive).
 // Skips gateways and local providers — those are matched by api_key/api_base.

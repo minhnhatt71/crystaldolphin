@@ -35,19 +35,15 @@ func init() {
 	gatewayCmd.AddCommand(gatewayStartCmd)
 	gatewayCmd.AddCommand(gatewayStopCmd)
 	gatewayCmd.AddCommand(gatewayStatusCmd)
-}
 
-// ---- start -----------------------------------------------------------------
+	gatewayStartCmd.Flags().IntVarP(&gatewayPort, "port", "p", 18790, "Gateway port")
+	gatewayStartCmd.Flags().BoolVarP(&gatewayVerbose, "verbose", "v", false, "Verbose logging")
+}
 
 var gatewayStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the gateway server",
 	RunE:  runGatewayStart,
-}
-
-func init() {
-	gatewayStartCmd.Flags().IntVarP(&gatewayPort, "port", "p", 18790, "Gateway port")
-	gatewayStartCmd.Flags().BoolVarP(&gatewayVerbose, "verbose", "v", false, "Verbose logging")
 }
 
 func runGatewayStart(_ *cobra.Command, _ []string) error {
@@ -90,6 +86,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 		if ch == "" {
 			ch = "cli"
 		}
+
 		resp := loop.ProcessDirect(ctx, job.Payload.Message, sessionKey, ch, chatID)
 		if job.Payload.Deliver && job.Payload.To != nil {
 			b.Outbound <- bus.OutboundMessage{
@@ -135,8 +132,6 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// ---- stop ------------------------------------------------------------------
-
 var gatewayStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop a running gateway server",
@@ -156,8 +151,6 @@ var gatewayStopCmd = &cobra.Command{
 		return nil
 	},
 }
-
-// ---- status ----------------------------------------------------------------
 
 var gatewayStatusCmd = &cobra.Command{
 	Use:   "status",
@@ -183,8 +176,6 @@ var gatewayStatusCmd = &cobra.Command{
 		return nil
 	},
 }
-
-// ---- PID file helpers ------------------------------------------------------
 
 func pidFilePath() string {
 	return filepath.Join(config.DataDir(), "gateway.pid")

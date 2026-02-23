@@ -10,8 +10,6 @@ type MessageBus struct {
 	Outbound chan OutboundMessage // agent → channels
 }
 
-// NewMessageBus creates a MessageBus with the given buffer size on each direction.
-// A buffer of 100 is a reasonable default for burst traffic.
 func NewMessageBus(bufSize int) *MessageBus {
 	return &MessageBus{
 		Inbound:  make(chan InboundMessage, bufSize),
@@ -19,8 +17,6 @@ func NewMessageBus(bufSize int) *MessageBus {
 	}
 }
 
-// InboundSize returns the number of unconsumed inbound messages.
 func (b *MessageBus) InboundSize() int { return len(b.Inbound) }
 
-// OutboundSize returns the number of unconsumed outbound messages.
 func (b *MessageBus) OutboundSize() int { return len(b.Outbound) }

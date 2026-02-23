@@ -29,17 +29,17 @@ type AgentLoop struct {
 	provider providers.LLMProvider
 	cfg      *config.Config
 
-	model           string
-	maxIter         int
-	temperature     float64
-	maxTokens       int
-	memoryWindow    int
-	workspace       string
+	model            string
+	maxIter          int
+	temperature      float64
+	maxTokens        int
+	memoryWindow     int
+	workspace        string
 	builtinSkillsDir string
 
-	ctx     *ContextBuilder
+	ctx      *ContextBuilder
 	sessions *session.Manager
-	reg     *tools.Registry
+	reg      *tools.Registry
 
 	subagents *SubagentManager
 
@@ -66,6 +66,7 @@ func NewAgentLoop(b *bus.MessageBus, provider providers.LLMProvider, cfg *config
 	if cfg.Tools.RestrictToWorkspace {
 		allowedDir = workspace
 	}
+
 	reg.Register(tools.NewReadFileTool(workspace, allowedDir))
 	reg.Register(tools.NewWriteFileTool(workspace, allowedDir))
 	reg.Register(tools.NewEditFileTool(workspace, allowedDir))
@@ -73,11 +74,9 @@ func NewAgentLoop(b *bus.MessageBus, provider providers.LLMProvider, cfg *config
 	reg.Register(tools.NewExecTool(workspace, cfg.Tools.Exec.Timeout, cfg.Tools.RestrictToWorkspace))
 	reg.Register(tools.NewWebSearchTool(cfg.Tools.Web.Search.APIKey, cfg.Tools.Web.Search.MaxResults))
 	reg.Register(tools.NewWebFetchTool(0))
-	// MessageTool and SpawnTool are added below (need loop reference).
+	reg.Register(tools.NewMessageTool(b))
 
-	msgTool := tools.NewMessageTool(b)
-	reg.Register(msgTool)
-
+	// Spawn tool
 	subMgr := NewSubagentManager(
 		provider, workspace, b,
 		model,
@@ -87,26 +86,26 @@ func NewAgentLoop(b *bus.MessageBus, provider providers.LLMProvider, cfg *config
 		cfg.Tools.Exec.Timeout,
 		cfg.Tools.RestrictToWorkspace,
 	)
+
 	reg.Register(tools.NewSpawnTool(subMgr))
 
-	al := &AgentLoop{
-		bus:             b,
-		provider:        provider,
-		cfg:             cfg,
-		model:           model,
-		maxIter:         cfg.Agents.Defaults.MaxToolIter,
-		temperature:     cfg.Agents.Defaults.Temperature,
-		maxTokens:       cfg.Agents.Defaults.MaxTokens,
-		memoryWindow:    cfg.Agents.Defaults.MemoryWindow,
-		workspace:       workspace,
+	return &AgentLoop{
+		bus:              b,
+		provider:         provider,
+		cfg:              cfg,
+		model:            model,
+		maxIter:          cfg.Agents.Defaults.MaxToolIter,
+		temperature:      cfg.Agents.Defaults.Temperature,
+		maxTokens:        cfg.Agents.Defaults.MaxTokens,
+		memoryWindow:     cfg.Agents.Defaults.MemoryWindow,
+		workspace:        workspace,
 		builtinSkillsDir: builtinSkillsDir,
-		ctx:             NewContextBuilder(workspace, builtinSkillsDir),
-		sessions:        mustNewSessionManager(workspace),
-		reg:             reg,
-		subagents:       subMgr,
-		consolidating:   make(map[string]bool),
+		ctx:              NewContextBuilder(workspace, builtinSkillsDir),
+		sessions:         mustNewSessionManager(workspace),
+		reg:              reg,
+		subagents:        subMgr,
+		consolidating:    make(map[string]bool),
 	}
-	return al
 }
 
 // SetCronTool registers a CronTool that wraps the given CronServicer.

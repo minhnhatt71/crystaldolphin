@@ -76,6 +76,7 @@ func (r *Registry) GetDefinitions() []map[string]any {
 }
 
 // Execute runs a named tool and returns its output as a string.
+//
 // Returns an error string (not a Go error) if the tool is missing or panics,
 // matching Python's behaviour of returning error messages as strings.
 func (r *Registry) Execute(ctx context.Context, name string, params map[string]any) string {

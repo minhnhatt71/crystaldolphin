@@ -30,14 +30,14 @@ type SubagentManager struct {
 	restrictToWorkspace bool
 
 	mu      sync.Mutex
-	running map[string]context.CancelFunc // taskID → cancel
+	running map[string]context.CancelFunc
 }
 
 // NewSubagentManager creates a SubagentManager.
 func NewSubagentManager(
 	provider providers.LLMProvider,
 	workspace string,
-	b *bus.MessageBus,
+	msgBus *bus.MessageBus,
 	model string,
 	temperature float64,
 	maxTokens int,
@@ -48,7 +48,7 @@ func NewSubagentManager(
 	return &SubagentManager{
 		provider:            provider,
 		workspace:           workspace,
-		bus:                 b,
+		bus:                 msgBus,
 		model:               model,
 		temperature:         temperature,
 		maxTokens:           maxTokens,
@@ -99,10 +99,6 @@ func (sm *SubagentManager) RunningCount() int {
 	return len(sm.running)
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
 func (sm *SubagentManager) runSubagent(
 	ctx context.Context,
 	taskID, task, label, originChannel, originChatID string,
@@ -126,18 +122,18 @@ func (sm *SubagentManager) runSubagent(
 
 func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
 	// Isolated tool registry — no message, no spawn tools.
-	reg := tools.NewRegistry()
+	registry := tools.NewRegistry()
 	allowedDir := ""
 	if sm.restrictToWorkspace {
 		allowedDir = sm.workspace
 	}
-	reg.Register(tools.NewReadFileTool(sm.workspace, allowedDir))
-	reg.Register(tools.NewWriteFileTool(sm.workspace, allowedDir))
-	reg.Register(tools.NewEditFileTool(sm.workspace, allowedDir))
-	reg.Register(tools.NewListDirTool(sm.workspace, allowedDir))
-	reg.Register(tools.NewExecTool(sm.workspace, sm.execTimeout, sm.restrictToWorkspace))
-	reg.Register(tools.NewWebSearchTool(sm.braveAPIKey, 5))
-	reg.Register(tools.NewWebFetchTool(0))
+	registry.Register(tools.NewReadFileTool(sm.workspace, allowedDir))
+	registry.Register(tools.NewWriteFileTool(sm.workspace, allowedDir))
+	registry.Register(tools.NewEditFileTool(sm.workspace, allowedDir))
+	registry.Register(tools.NewListDirTool(sm.workspace, allowedDir))
+	registry.Register(tools.NewExecTool(sm.workspace, sm.execTimeout, sm.restrictToWorkspace))
+	registry.Register(tools.NewWebSearchTool(sm.braveAPIKey, 5))
+	registry.Register(tools.NewWebFetchTool(0))
 
 	systemPrompt := sm.buildPrompt(task)
 	messages := []map[string]any{
@@ -147,7 +143,7 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 
 	const maxIter = 15
 	for i := 0; i < maxIter; i++ {
-		resp, err := sm.provider.Chat(ctx, messages, reg.GetDefinitions(), providers.ChatOptions{
+		resp, err := sm.provider.Chat(ctx, messages, registry.GetDefinitions(), providers.ChatOptions{
 			Model:       sm.model,
 			MaxTokens:   sm.maxTokens,
 			Temperature: sm.temperature,
@@ -193,7 +189,7 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 		// Execute each tool.
 		for _, tc := range resp.ToolCalls {
 			slog.Debug("Subagent tool call", "id", taskID(ctx), "tool", tc.Name)
-			result := reg.Execute(ctx, tc.Name, tc.Arguments)
+			result := registry.Execute(ctx, tc.Name, tc.Arguments)
 			messages = append(messages, map[string]any{
 				"role":         "tool",
 				"tool_call_id": tc.ID,

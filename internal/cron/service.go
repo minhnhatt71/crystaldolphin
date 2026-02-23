@@ -25,10 +25,6 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
 )
 
-// --------------------------------------------------------------------------
-// Data types (JSON-compatible with Python)
-// --------------------------------------------------------------------------
-
 type CronSchedule struct {
 	Kind    string  `json:"kind"`              // "every" | "cron" | "at"
 	AtMs    *int64  `json:"atMs,omitempty"`    // one-time
@@ -76,9 +72,9 @@ type cronStore struct {
 // OnJobFunc is called when a job fires.  It returns the agent's response text.
 type OnJobFunc func(ctx context.Context, job CronJob) (string, error)
 
-// Service manages scheduled jobs.
+// JobManager manages scheduled jobs.
 // It also implements tools.CronServicer so it can be passed to CronTool.
-type Service struct {
+type JobManager struct {
 	storePath string
 	onJob     OnJobFunc
 
@@ -93,8 +89,8 @@ type Service struct {
 
 // NewService creates a CronService.
 // storePath is the path to jobs.json (e.g. ~/.nanobot/cron/jobs.json).
-func NewService(storePath string) *Service {
-	return &Service{
+func NewService(storePath string) *JobManager {
+	return &JobManager{
 		storePath: storePath,
 		timers:    make(map[string]*time.Timer),
 		robfig:    robfigcron.New(robfigcron.WithSeconds()),
@@ -104,15 +100,16 @@ func NewService(storePath string) *Service {
 
 // SetOnJob registers the callback executed when a job fires.
 // Must be set before Start().
-func (s *Service) SetOnJob(fn OnJobFunc) { s.onJob = fn }
+func (s *JobManager) SetOnJob(fn OnJobFunc) { s.onJob = fn }
 
 // Start loads jobs from disk, (re)computes next-run times, and arms all timers.
 // Blocks until ctx is cancelled.
-func (s *Service) Start(ctx context.Context) error {
+func (s *JobManager) Start(ctx context.Context) error {
 	s.mu.Lock()
 	if err := s.loadLocked(); err != nil {
 		slog.Warn("cron: load failed, starting empty", "err", err)
 	}
+
 	s.recomputeNextRunsLocked()
 	s.saveLocked()
 	s.armAllLocked(ctx)
@@ -134,7 +131,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 // AddJob adds a new job, saves it, and arms its timer.
 // Implements tools.CronServicer.AddJob.
-func (s *Service) AddJob(
+func (s *JobManager) AddJob(
 	name, message, kind string,
 	everyMs int64, cronExpr, tz string, atMs int64,
 	deliver bool, channel, to string, deleteAfterRun bool,
@@ -192,7 +189,7 @@ func (s *Service) AddJob(
 
 // ListJobs returns summaries of all enabled jobs.
 // Implements tools.CronServicer.ListJobs.
-func (s *Service) ListJobs() []tools.CronJobSummary {
+func (s *JobManager) ListJobs() []tools.CronJobSummary {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []tools.CronJobSummary
@@ -207,7 +204,7 @@ func (s *Service) ListJobs() []tools.CronJobSummary {
 
 // RemoveJob removes a job by ID and returns true if found.
 // Implements tools.CronServicer.RemoveJob.
-func (s *Service) RemoveJob(id string) bool {
+func (s *JobManager) RemoveJob(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	before := len(s.store.Jobs)
@@ -231,7 +228,7 @@ func (s *Service) RemoveJob(id string) bool {
 // --------------------------------------------------------------------------
 
 // ListAllJobs returns all jobs; includeDisabled controls visibility.
-func (s *Service) ListAllJobs(includeDisabled bool) []CronJob {
+func (s *JobManager) ListAllJobs(includeDisabled bool) []CronJob {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_ = s.loadLocked() // ensure loaded
@@ -256,7 +253,7 @@ func (s *Service) ListAllJobs(includeDisabled bool) []CronJob {
 }
 
 // AddJobFull is the CLI-level add (takes a fully-formed CronJob minus ID/times).
-func (s *Service) AddJobFull(name, message, kind string, everyMs int64, cronExpr, tz string, atMs int64,
+func (s *JobManager) AddJobFull(name, message, kind string, everyMs int64, cronExpr, tz string, atMs int64,
 	deliver bool, channel, to string, deleteAfterRun bool) (CronJob, error) {
 	id, err := s.AddJob(name, message, kind, everyMs, cronExpr, tz, atMs, deliver, channel, to, deleteAfterRun)
 	if err != nil {
@@ -273,7 +270,7 @@ func (s *Service) AddJobFull(name, message, kind string, everyMs int64, cronExpr
 }
 
 // EnableJob enables or disables a job.
-func (s *Service) EnableJob(id string, enabled bool) (CronJob, bool) {
+func (s *JobManager) EnableJob(id string, enabled bool) (CronJob, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.store.Jobs {
@@ -295,7 +292,7 @@ func (s *Service) EnableJob(id string, enabled bool) (CronJob, bool) {
 }
 
 // RunJob manually executes a job (force=true ignores disabled flag).
-func (s *Service) RunJob(ctx context.Context, id string, force bool) bool {
+func (s *JobManager) RunJob(ctx context.Context, id string, force bool) bool {
 	s.mu.Lock()
 	var job *CronJob
 	for i := range s.store.Jobs {
@@ -323,7 +320,7 @@ func (s *Service) RunJob(ctx context.Context, id string, force bool) bool {
 // Internal scheduling logic
 // --------------------------------------------------------------------------
 
-func (s *Service) recomputeNextRunsLocked() {
+func (s *JobManager) recomputeNextRunsLocked() {
 	now := nowMs()
 	for i := range s.store.Jobs {
 		if s.store.Jobs[i].Enabled {
@@ -332,15 +329,15 @@ func (s *Service) recomputeNextRunsLocked() {
 	}
 }
 
-func (s *Service) armAllLocked(ctx context.Context) {
-	for _, j := range s.store.Jobs {
-		if j.Enabled {
-			s.armJobLocked(ctx, j)
+func (s *JobManager) armAllLocked(ctx context.Context) {
+	for _, job := range s.store.Jobs {
+		if job.Enabled {
+			s.armJobLocked(ctx, job)
 		}
 	}
 }
 
-func (s *Service) armJobLocked(ctx context.Context, job CronJob) {
+func (s *JobManager) armJobLocked(ctx context.Context, job CronJob) {
 	s.cancelTimerLocked(job.ID)
 
 	switch job.Schedule.Kind {
@@ -404,7 +401,7 @@ func (s *Service) armJobLocked(ctx context.Context, job CronJob) {
 	}
 }
 
-func (s *Service) cancelTimerLocked(id string) {
+func (s *JobManager) cancelTimerLocked(id string) {
 	if t, ok := s.timers[id]; ok {
 		t.Stop()
 		delete(s.timers, id)
@@ -415,7 +412,7 @@ func (s *Service) cancelTimerLocked(id string) {
 	}
 }
 
-func (s *Service) executeJob(ctx context.Context, job CronJob) {
+func (s *JobManager) executeJob(ctx context.Context, job CronJob) {
 	startMs := nowMs()
 	slog.Info("cron: executing job", "name", job.Name, "id", job.ID)
 
@@ -470,7 +467,7 @@ func (s *Service) executeJob(ctx context.Context, job CronJob) {
 // Persistence
 // --------------------------------------------------------------------------
 
-func (s *Service) loadLocked() error {
+func (s *JobManager) loadLocked() error {
 	if len(s.store.Jobs) > 0 {
 		return nil // already loaded
 	}
@@ -493,7 +490,7 @@ func (s *Service) loadLocked() error {
 	return nil
 }
 
-func (s *Service) saveLocked() {
+func (s *JobManager) saveLocked() {
 	if err := os.MkdirAll(filepath.Dir(s.storePath), 0o755); err != nil {
 		slog.Warn("cron: mkdir failed", "err", err)
 		return

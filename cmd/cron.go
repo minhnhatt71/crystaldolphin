@@ -63,8 +63,6 @@ func init() {
 	cronListCmd.Flags().BoolVarP(&cronListAll, "all", "a", false, "Include disabled jobs")
 }
 
-// ---- add -------------------------------------------------------------------
-
 var (
 	cronAddName    string
 	cronAddMsg     string
@@ -137,8 +135,6 @@ func init() {
 	_ = cronAddCmd.MarkFlagRequired("message")
 }
 
-// ---- remove ----------------------------------------------------------------
-
 var cronRemoveCmd = &cobra.Command{
 	Use:   "remove <job-id>",
 	Short: "Remove a scheduled job",
@@ -153,8 +149,6 @@ var cronRemoveCmd = &cobra.Command{
 		return nil
 	},
 }
-
-// ---- enable ----------------------------------------------------------------
 
 var cronEnableDisable bool
 

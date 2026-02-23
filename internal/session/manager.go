@@ -1,9 +1,10 @@
 // Package session manages per-conversation history stored as JSONL files.
 //
 // File format (byte-compatible with nanobot Python):
-//   Line 1:  {"_type":"metadata","key":"…","created_at":"…","updated_at":"…",
-//              "metadata":{…},"last_consolidated":N}
-//   Line 2+: one JSON message object per line
+//
+//	Line 1:  {"_type":"metadata","key":"…","created_at":"…","updated_at":"…",
+//	           "metadata":{…},"last_consolidated":N}
+//	Line 2+: one JSON message object per line
 //
 // Messages are append-only; consolidation only writes to memory files.
 package session
@@ -30,7 +31,7 @@ type Session struct {
 	Metadata         map[string]any
 	LastConsolidated int // number of messages already consolidated to MEMORY.md/HISTORY.md
 
-	mu sync.Mutex // guards concurrent reads/writes from the agent loop
+	mu sync.Mutex
 }
 
 // AddMessage appends a new message to the session.
@@ -44,9 +45,11 @@ func (s *Session) AddMessage(role, content string, extras map[string]any) {
 		"content":   content,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	}
+
 	for k, v := range extras {
 		msg[k] = v
 	}
+
 	s.Messages = append(s.Messages, msg)
 	s.UpdatedAt = time.Now()
 }
@@ -100,8 +103,8 @@ func (s *Session) Unlock() { s.mu.Unlock() }
 
 // Manager loads and persists sessions as JSONL files.
 type Manager struct {
-	sessionsDir       string // workspace/sessions/
-	legacySessionsDir string // ~/.nanobot/sessions/ (migration only)
+	sessionsDir       string   // workspace/sessions/
+	legacySessionsDir string   // ~/.nanobot/sessions/ (migration only)
 	cache             sync.Map // key → *Session
 }
 
