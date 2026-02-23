@@ -83,24 +83,7 @@ workspace/                      Default workspace files copied on `onboard`
   memory/MEMORY.md
 ```
 
-## Data flow
-
-```
-Chat platform
-    │  (platform-specific listener)
-    ▼
-channels/*.go  ──HandleMessage()──▶  bus.Inbound  ──▶  agent/loop.go
-                                                              │
-                                                   runAgentLoop()
-                                                              │
-                                              providers/*.go (LLM call)
-                                                              │
-                                               tools/registry.go (tool calls)
-                                                              │
-                                                    bus.Outbound
-                                                              │
-                                          channels/manager.go ──Send()──▶  Chat platform
-```
+See [agent-architecture.md](agent-architecture.md) for data flow, bus message types, and direct processing.
 
 ## Key interfaces
 

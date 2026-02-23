@@ -2,7 +2,9 @@
 
 ## Architecture
 
-See [.claude/rules/architecture.md](.claude/rules/architecture.md) for the full package map, data flow, key interfaces, task-to-file lookup table, and compatibility contracts.
+See [.claude/rules/architecture.md](.claude/rules/architecture.md) for the full package map, key interfaces, task-to-file lookup table, and compatibility contracts.
+
+See [.claude/rules/agent-architecture.md](.claude/rules/agent-architecture.md) for data flow, bus message types, and direct processing.
 
 ## DevOps
 
