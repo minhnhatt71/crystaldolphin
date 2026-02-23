@@ -1,6 +1,7 @@
 BINARY   := crystaldolphin
 MODULE   := github.com/crystaldolphin/crystaldolphin
 BUILD_FLAGS := -ldflags="-s -w"
+BUILD_DIR := build
 
 .PHONY: all build run dev clean bridge bridge-dev docker docker-up docker-down tidy
 
@@ -9,10 +10,11 @@ all: build bridge
 
 ## Go binary
 build:
-	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $(BINARY) ./main.go
+	mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=0 go build $(BUILD_FLAGS) -o $(BUILD_DIR)/$(BINARY) ./main.go
 
 run: build
-	./$(BINARY)
+	./$(BUILD_DIR)/$(BINARY)
 
 dev:
 	go run ./main.go
@@ -39,5 +41,5 @@ tidy:
 	go mod tidy
 
 clean:
-	rm -f $(BINARY)
+	rm -rf $(BUILD_DIR)
 	rm -rf bridge/dist
