@@ -1,0 +1,70 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "gateway start",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/main.go",
+      "args": ["gateway", "start", "--verbose"]
+    },
+    {
+      "name": "gateway status",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/main.go",
+      "args": ["gateway", "status"]
+    },
+    {
+      "name": "gateway stop",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/main.go",
+      "args": ["gateway", "stop"]
+    },
+    {
+      "name": "agent (interactive)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/main.go",
+      "args": ["agent"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "agent -m \"Hello!\"",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/main.go",
+      "args": ["agent", "-m", "Hello!"]
+    },
+    {
+      "name": "status",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/main.go",
+      "args": ["status"]
+    },
+    {
+      "name": "onboard",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/main.go",
+      "args": ["onboard"]
+    },
+    {
+      "name": "cron list",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/main.go",
+      "args": ["cron", "list"]
+    }
+  ]
+}

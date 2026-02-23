@@ -59,12 +59,12 @@ func runAgent(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	b := bus.NewMessageBus(100)
+	msgBus := bus.NewMessageBus(100)
 
 	cronPath := config.DataDir() + "/cron/jobs.json"
 	cronSvc := cron.NewService(cronPath)
 
-	loop := agent.NewAgentLoop(b, provider, cfg, "")
+	loop := agent.NewAgentLoop(msgBus, provider, cfg, "")
 	loop.SetCronTool(cronSvc)
 
 	sessionKey := agentSession
@@ -119,7 +119,7 @@ func runAgent(_ *cobra.Command, _ []string) error {
 
 		// Send to bus; wait for response.
 		doneCh := make(chan struct{})
-		b.Inbound <- bus.InboundMessage{
+		msgBus.Inbound <- bus.InboundMessage{
 			Channel:   channel,
 			SenderID:  "user",
 			ChatID:    chatID,
@@ -131,7 +131,7 @@ func runAgent(_ *cobra.Command, _ []string) error {
 			defer close(doneCh)
 			for {
 				select {
-				case msg := <-b.Outbound:
+				case msg := <-msgBus.Outbound:
 					if msg.Metadata != nil {
 						if prog, _ := msg.Metadata["_progress"].(bool); prog {
 							fmt.Printf("  ↳ %s\n", msg.Content)
