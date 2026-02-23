@@ -51,7 +51,7 @@ type AgentDefaults struct {
 func defaultAgentDefaults() AgentDefaults {
 	return AgentDefaults{
 		Workspace:    "~/.nanobot/workspace",
-		Model:        "anthropic/claude-opus-4-5",
+		Model:        "gemini/gemini-2.5-pro",
 		MaxTokens:    8192,
 		Temperature:  0.7,
 		MaxToolIter:  20,

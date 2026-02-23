@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -25,16 +28,29 @@ var (
 
 var gatewayCmd = &cobra.Command{
 	Use:   "gateway",
-	Short: "Start the crystaldolphin gateway server",
-	RunE:  runGateway,
+	Short: "Manage the crystaldolphin gateway server",
 }
 
 func init() {
-	gatewayCmd.Flags().IntVarP(&gatewayPort, "port", "p", 18790, "Gateway port")
-	gatewayCmd.Flags().BoolVarP(&gatewayVerbose, "verbose", "v", false, "Verbose logging")
+	gatewayCmd.AddCommand(gatewayStartCmd)
+	gatewayCmd.AddCommand(gatewayStopCmd)
+	gatewayCmd.AddCommand(gatewayStatusCmd)
 }
 
-func runGateway(_ *cobra.Command, _ []string) error {
+// ---- start -----------------------------------------------------------------
+
+var gatewayStartCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Start the gateway server",
+	RunE:  runGatewayStart,
+}
+
+func init() {
+	gatewayStartCmd.Flags().IntVarP(&gatewayPort, "port", "p", 18790, "Gateway port")
+	gatewayStartCmd.Flags().BoolVarP(&gatewayVerbose, "verbose", "v", false, "Verbose logging")
+}
+
+func runGatewayStart(_ *cobra.Command, _ []string) error {
 	cfg, err := config.Load(config.ConfigPath())
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -46,6 +62,11 @@ func runGateway(_ *cobra.Command, _ []string) error {
 	}
 
 	fmt.Printf("%s Starting crystaldolphin gateway on port %d...\n", logo, gatewayPort)
+
+	if err := writePIDFile(); err != nil {
+		return err
+	}
+	defer removePIDFile()
 
 	b := bus.NewMessageBus(100)
 
@@ -94,14 +115,7 @@ func runGateway(_ *cobra.Command, _ []string) error {
 
 	channelMgr := channels.NewManager(cfg, b)
 	if enabled := channelMgr.EnabledChannels(); len(enabled) > 0 {
-		var sb string
-		for i, n := range enabled {
-			if i > 0 {
-				sb += ", "
-			}
-			sb += n
-		}
-		fmt.Printf("✓ Channels enabled: %s\n", sb)
+		fmt.Printf("✓ Channels enabled: %s\n", strings.Join(enabled, ", "))
 	} else {
 		fmt.Println("Warning: no channels enabled")
 	}
@@ -119,4 +133,79 @@ func runGateway(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Println("\nShutdown complete.")
 	return nil
+}
+
+// ---- stop ------------------------------------------------------------------
+
+var gatewayStopCmd = &cobra.Command{
+	Use:   "stop",
+	Short: "Stop a running gateway server",
+	RunE: func(_ *cobra.Command, _ []string) error {
+		pid, err := readPIDFile()
+		if err != nil {
+			return fmt.Errorf("gateway does not appear to be running: %w", err)
+		}
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			return fmt.Errorf("could not find process %d: %w", pid, err)
+		}
+		if err := proc.Signal(syscall.SIGTERM); err != nil {
+			return fmt.Errorf("failed to stop gateway (pid %d): %w", pid, err)
+		}
+		fmt.Printf("✓ Sent SIGTERM to gateway (pid %d)\n", pid)
+		return nil
+	},
+}
+
+// ---- status ----------------------------------------------------------------
+
+var gatewayStatusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show gateway status",
+	RunE: func(_ *cobra.Command, _ []string) error {
+		pid, err := readPIDFile()
+		if err != nil {
+			fmt.Println("Gateway: stopped")
+			return nil
+		}
+		proc, err := os.FindProcess(pid)
+		if err != nil {
+			fmt.Println("Gateway: stopped")
+			return nil
+		}
+		// On Linux, FindProcess always succeeds; send signal 0 to check liveness.
+		if err := proc.Signal(syscall.Signal(0)); err != nil {
+			fmt.Println("Gateway: stopped")
+			removePIDFile()
+			return nil
+		}
+		fmt.Printf("Gateway: running (pid %d, port %d)\n", pid, gatewayPort)
+		return nil
+	},
+}
+
+// ---- PID file helpers ------------------------------------------------------
+
+func pidFilePath() string {
+	return filepath.Join(config.DataDir(), "gateway.pid")
+}
+
+func writePIDFile() error {
+	path := pidFilePath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())), 0o644)
+}
+
+func removePIDFile() {
+	_ = os.Remove(pidFilePath())
+}
+
+func readPIDFile() (int, error) {
+	data, err := os.ReadFile(pidFilePath())
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(strings.TrimSpace(string(data)))
 }

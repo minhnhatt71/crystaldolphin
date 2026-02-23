@@ -17,7 +17,7 @@ The final image installs Node.js 20 via the NodeSource repo, copies the binary a
 
 | Service | Profile | Command | Port |
 |---|---|---|---|
-| `crystaldolphin-gateway` | (default) | `gateway` | 18790 |
+| `crystaldolphin-gateway` | (default) | `gateway start` | 18790 |
 | `crystaldolphin-cli` | `cli` | `status` (overridable) | — |
 
 Both services mount `~/.nanobot` from the host at `/root/.nanobot`.
@@ -49,7 +49,7 @@ make docker-down                    # docker compose down
 ```bash
 docker build -t crystaldolphin .
 docker run -v ~/.nanobot:/root/.nanobot --rm crystaldolphin onboard
-docker run -v ~/.nanobot:/root/.nanobot -p 18790:18790 crystaldolphin gateway
+docker run -v ~/.nanobot:/root/.nanobot -p 18790:18790 crystaldolphin gateway start
 docker run -v ~/.nanobot:/root/.nanobot --rm crystaldolphin agent -m "Hello!"
 ```
 
@@ -86,3 +86,4 @@ All persistent data lives in `~/.nanobot/` (host) / `/root/.nanobot/` (container
 | `sessions/` | JSONL conversation history |
 | `cron/jobs.json` | Scheduled jobs |
 | `whatsapp/` | Baileys session credentials |
+| `gateway.pid` | PID of the running gateway process (written by `gateway start`) |

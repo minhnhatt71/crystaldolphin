@@ -11,7 +11,7 @@ cmd/                            CLI layer (cobra)
   root.go                       Root command, registers all sub-commands
   onboard.go                    `onboard` — create config & workspace
   agent.go                      `agent` — interactive / single-message chat
-  gateway.go                    `gateway` — start all channels + background services
+  gateway.go                    `gateway start|stop|status` — manage the gateway server
   status.go                     `status` — display config / provider health
   cron.go                       `cron list|add|remove|run` — manage scheduled jobs
   channels.go                   `channels status|login` — channel management
