@@ -3,12 +3,13 @@ package config
 import (
 	"strings"
 
+	"github.com/crystaldolphin/crystaldolphin/internal/config/provider"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
 )
 
 // MatchResult is the resolved LLM provider config and registry name for a model.
 type MatchResult struct {
-	Provider *ProviderConfig
+	Provider *provider.ProviderConfig
 	Name     string // e.g. "openrouter", "anthropic"
 }
 
@@ -80,7 +81,7 @@ func (c *Config) MatchProvider(model string) MatchResult {
 }
 
 // GetProvider returns the matched ProviderConfig for model (or nil).
-func (c *Config) GetProvider(model string) *ProviderConfig {
+func (c *Config) GetProvider(model string) *provider.ProviderConfig {
 	return c.MatchProvider(model).Provider
 }
 

@@ -11,19 +11,19 @@ import (
 	"github.com/slack-go/slack/socketmode"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
 // SlackChannel implements Slack via Socket Mode.
 type SlackChannel struct {
 	Base
-	cfg       *config.SlackConfig
+	cfg       *channel.SlackConfig
 	webClient *slackgo.Client
 	smClient  *socketmode.Client
 	botUserID string
 }
 
-func NewSlackChannel(cfg *config.SlackConfig, b *bus.MessageBus) *SlackChannel {
+func NewSlackChannel(cfg *channel.SlackConfig, b *bus.MessageBus) *SlackChannel {
 	return &SlackChannel{
 		Base: NewBase("slack", b, nil), // Slack uses its own allow logic
 		cfg:  cfg,

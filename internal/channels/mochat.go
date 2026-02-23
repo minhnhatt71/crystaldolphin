@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
 // MochatChannel polls the Mochat HTTP API for new messages.
@@ -21,7 +21,7 @@ import (
 // as a simpler, dependency-free approach that preserves all behaviour.
 type MochatChannel struct {
 	Base
-	cfg        *config.MochatConfig
+	cfg        *channel.MochatConfig
 	httpClient *http.Client
 	mu         sync.Mutex
 	cursors    map[string]string // sessionID/panelID → cursor
@@ -29,7 +29,7 @@ type MochatChannel struct {
 	seenQueue  []string
 }
 
-func NewMochatChannel(cfg *config.MochatConfig, b *bus.MessageBus) *MochatChannel {
+func NewMochatChannel(cfg *channel.MochatConfig, b *bus.MessageBus) *MochatChannel {
 	return &MochatChannel{
 		Base:       NewBase("mochat", b, cfg.AllowFrom),
 		cfg:        cfg,

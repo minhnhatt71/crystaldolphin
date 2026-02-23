@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
 // EmailChannel polls IMAP for new messages and sends via SMTP.
@@ -20,11 +20,11 @@ import (
 // to avoid bringing in a heavy dependency.
 type EmailChannel struct {
 	Base
-	cfg     *config.EmailConfig
+	cfg     *channel.EmailConfig
 	seenUID map[uint32]bool
 }
 
-func NewEmailChannel(cfg *config.EmailConfig, b *bus.MessageBus) *EmailChannel {
+func NewEmailChannel(cfg *channel.EmailConfig, b *bus.MessageBus) *EmailChannel {
 	return &EmailChannel{
 		Base:    NewBase("email", b, cfg.AllowFrom),
 		cfg:     cfg,

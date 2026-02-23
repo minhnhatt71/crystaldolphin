@@ -15,21 +15,21 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
 // FeishuChannel connects to Feishu/Lark via WebSocket long connection.
 // It uses the Feishu Open Platform event subscription (WebSocket mode).
 type FeishuChannel struct {
 	Base
-	cfg        *config.FeishuConfig
+	cfg        *channel.FeishuConfig
 	httpClient *http.Client
 	token      string
 	tokenMu    sync.Mutex
 	tokenExp   time.Time
 }
 
-func NewFeishuChannel(cfg *config.FeishuConfig, b *bus.MessageBus) *FeishuChannel {
+func NewFeishuChannel(cfg *channel.FeishuConfig, b *bus.MessageBus) *FeishuChannel {
 	return &FeishuChannel{
 		Base:       NewBase("feishu", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -78,9 +78,9 @@ func (f *FeishuChannel) connectOnce(ctx context.Context) error {
 			return err
 		}
 		var frame struct {
-			Type    string          `json:"type"`
+			Type    string            `json:"type"`
 			Headers map[string]string `json:"headers"`
-			Data    json.RawMessage `json:"data"`
+			Data    json.RawMessage   `json:"data"`
 		}
 		if err := json.Unmarshal(raw, &frame); err != nil {
 			continue

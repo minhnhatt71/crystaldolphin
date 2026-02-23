@@ -10,18 +10,18 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
 // WhatsAppChannel connects to the Node.js Baileys bridge via WebSocket.
 type WhatsAppChannel struct {
 	Base
-	cfg       *config.WhatsAppConfig
+	cfg       *channel.WhatsAppConfig
 	conn      *websocket.Conn
 	connected bool
 }
 
-func NewWhatsAppChannel(cfg *config.WhatsAppConfig, b *bus.MessageBus) *WhatsAppChannel {
+func NewWhatsAppChannel(cfg *channel.WhatsAppConfig, b *bus.MessageBus) *WhatsAppChannel {
 	return &WhatsAppChannel{
 		Base: NewBase("whatsapp", b, cfg.AllowFrom),
 		cfg:  cfg,

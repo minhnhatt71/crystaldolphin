@@ -8,33 +8,33 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
 const (
-	discordAPI        = "https://discord.com/api/v10"
-	discordMaxMsgLen  = 2000
-	discordMaxFileB   = 20 * 1024 * 1024 // 20 MB
+	discordAPI       = "https://discord.com/api/v10"
+	discordMaxMsgLen = 2000
+	discordMaxFileB  = 20 * 1024 * 1024 // 20 MB
 )
 
 // DiscordChannel connects to the Discord Gateway WebSocket.
 type DiscordChannel struct {
 	Base
-	cfg        *config.DiscordConfig
+	cfg        *channel.DiscordConfig
 	httpClient *http.Client
 	conn       *websocket.Conn
 	seq        *int
 }
 
-func NewDiscordChannel(cfg *config.DiscordConfig, b *bus.MessageBus) *DiscordChannel {
+func NewDiscordChannel(cfg *channel.DiscordConfig, b *bus.MessageBus) *DiscordChannel {
 	return &DiscordChannel{
 		Base:       NewBase("discord", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -276,7 +276,9 @@ func (d *DiscordChannel) postJSON(ctx context.Context, url string, payload any) 
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if resp.StatusCode == 429 {
-			var rate struct{ RetryAfter float64 `json:"retry_after"` }
+			var rate struct {
+				RetryAfter float64 `json:"retry_after"`
+			}
 			_ = json.Unmarshal(body, &rate)
 			d := time.Duration(rate.RetryAfter*1000) * time.Millisecond
 			if d <= 0 {

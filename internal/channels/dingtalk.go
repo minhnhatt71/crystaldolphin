@@ -15,20 +15,20 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
 // DingTalkChannel connects to DingTalk via Stream Mode (WebSocket).
 type DingTalkChannel struct {
 	Base
-	cfg        *config.DingTalkConfig
+	cfg        *channel.DingTalkConfig
 	httpClient *http.Client
 	token      string
 	tokenMu    sync.Mutex
 	tokenExp   time.Time
 }
 
-func NewDingTalkChannel(cfg *config.DingTalkConfig, b *bus.MessageBus) *DingTalkChannel {
+func NewDingTalkChannel(cfg *channel.DingTalkConfig, b *bus.MessageBus) *DingTalkChannel {
 	return &DingTalkChannel{
 		Base:       NewBase("dingtalk", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -107,8 +107,8 @@ func (d *DingTalkChannel) getStreamEndpoint(ctx context.Context) (endpoint, tick
 			{"type": "EVENT", "topic": "*"},
 			{"type": "CALLBACK", "topic": "/v1.0/im/bot/messages/get"},
 		},
-		"ua":       "crystaldolphin",
-		"localIp":  "127.0.0.1",
+		"ua":      "crystaldolphin",
+		"localIp": "127.0.0.1",
 	}
 	data, _ := json.Marshal(body)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,
@@ -175,9 +175,9 @@ func (d *DingTalkChannel) handleFrame(frame map[string]any) {
 	}
 
 	var data struct {
-		SenderID    string `json:"senderId"`
+		SenderID       string `json:"senderId"`
 		ConversationID string `json:"conversationId"`
-		Text        struct {
+		Text           struct {
 			Content string `json:"content"`
 		} `json:"text"`
 		MessageType string `json:"msgtype"`

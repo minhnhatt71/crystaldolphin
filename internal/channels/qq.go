@@ -14,14 +14,14 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
 // QQChannel connects to the QQ bot gateway WebSocket.
 // Implements C2C (private) message handling, mirroring Python qq.py.
 type QQChannel struct {
 	Base
-	cfg        *config.QQConfig
+	cfg        *channel.QQConfig
 	httpClient *http.Client
 	token      string
 	tokenMu    sync.Mutex
@@ -32,7 +32,7 @@ type QQChannel struct {
 	seenQueue []string
 }
 
-func NewQQChannel(cfg *config.QQConfig, b *bus.MessageBus) *QQChannel {
+func NewQQChannel(cfg *channel.QQConfig, b *bus.MessageBus) *QQChannel {
 	return &QQChannel{
 		Base:       NewBase("qq", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -92,7 +92,7 @@ func (q *QQChannel) getAccessToken(ctx context.Context) (string, error) {
 		return q.token, nil
 	}
 	body := map[string]string{
-		"appId":     q.cfg.AppID,
+		"appId":        q.cfg.AppID,
 		"clientSecret": q.cfg.Secret,
 	}
 	data, _ := json.Marshal(body)
@@ -164,7 +164,9 @@ func (q *QQChannel) gatewayLoop(ctx context.Context, conn *websocket.Conn, token
 
 		switch payload.Op {
 		case 10: // HELLO
-			var hello struct{ HeartbeatInterval int `json:"heartbeat_interval"` }
+			var hello struct {
+				HeartbeatInterval int `json:"heartbeat_interval"`
+			}
 			_ = json.Unmarshal(payload.D, &hello)
 			go q.heartbeatLoop(ctx, conn, time.Duration(hello.HeartbeatInterval)*time.Millisecond, heartbeatStop)
 			if err := q.identify(conn, token); err != nil {
@@ -247,7 +249,7 @@ func (q *QQChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		return err
 	}
 	body := map[string]any{
-		"content": msg.Content,
+		"content":  msg.Content,
 		"msg_type": 0,
 	}
 	if mid, ok := msg.Metadata["message_id"].(string); ok {

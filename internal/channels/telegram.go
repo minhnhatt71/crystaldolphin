@@ -15,18 +15,18 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
 // TelegramChannel implements the Telegram bot via long polling.
 type TelegramChannel struct {
 	Base
-	cfg *config.TelegramConfig
+	cfg *channel.TelegramConfig
 	bot *tgbotapi.BotAPI
 }
 
 // NewTelegramChannel creates a TelegramChannel.
-func NewTelegramChannel(cfg *config.TelegramConfig, b *bus.MessageBus) *TelegramChannel {
+func NewTelegramChannel(cfg *channel.TelegramConfig, b *bus.MessageBus) *TelegramChannel {
 	return &TelegramChannel{
 		Base: NewBase("telegram", b, cfg.AllowFrom),
 		cfg:  cfg,

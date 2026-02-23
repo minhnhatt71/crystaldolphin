@@ -14,9 +14,9 @@ type CronJobSummary struct {
 	Kind string // "every", "cron", "at"
 }
 
-// CronServicer is the interface the CronTool uses to interact with the cron service.
+// Service is the interface the CronTool uses to interact with the cron service.
 // Implemented by cron.Service. Defined here to avoid an import cycle.
-type CronServicer interface {
+type Service interface {
 	AddJob(name, message string, kind string, everyMs int64, cronExpr, tz string, atMs int64,
 		deliver bool, channel, to string, deleteAfterRun bool) (id string, err error)
 	ListJobs() []CronJobSummary
@@ -25,13 +25,13 @@ type CronServicer interface {
 
 // CronTool allows the agent to schedule reminders and recurring tasks.
 type CronTool struct {
-	svc     CronServicer
+	svc     Service
 	channel string
 	chatID  string
 }
 
-// NewCronTool creates a CronTool backed by the given CronServicer.
-func NewCronTool(svc CronServicer) *CronTool {
+// NewCronTool creates a CronTool backed by the given CronTool.
+func NewCronTool(svc Service) *CronTool {
 	return &CronTool{svc: svc}
 }
 
@@ -41,8 +41,12 @@ func (t *CronTool) SetContext(channel, chatID string) {
 	t.chatID = chatID
 }
 
-func (t *CronTool) Name() string        { return "cron" }
-func (t *CronTool) Description() string { return "Schedule reminders and recurring tasks. Actions: add, list, remove." }
+func (t *CronTool) Name() string { return "cron" }
+
+func (t *CronTool) Description() string {
+	return "Schedule reminders and recurring tasks. Actions: add, list, remove."
+}
+
 func (t *CronTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",

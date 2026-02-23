@@ -109,7 +109,7 @@ func NewAgentLoop(b *bus.MessageBus, provider providers.LLMProvider, cfg *config
 }
 
 // SetCronTool registers a CronTool that wraps the given CronServicer.
-func (al *AgentLoop) SetCronTool(svc tools.CronServicer) {
+func (al *AgentLoop) SetCronTool(svc tools.Service) {
 	al.reg.Register(tools.NewCronTool(svc))
 }
 
