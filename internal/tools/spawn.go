@@ -1,0 +1,71 @@
+package tools
+
+import (
+	"context"
+	"encoding/json"
+)
+
+// Spawner is the interface the SpawnTool uses to create background subagents.
+// Implemented by agent.SubagentManager. Defined here to avoid an import cycle.
+type Spawner interface {
+	Spawn(ctx context.Context, task, label, originChannel, originChatID string) (string, error)
+}
+
+// SpawnTool spawns a background subagent to handle a task asynchronously.
+type SpawnTool struct {
+	spawner        Spawner
+	originChannel  string
+	originChatID   string
+}
+
+// NewSpawnTool creates a SpawnTool backed by the given Spawner.
+func NewSpawnTool(spawner Spawner) *SpawnTool {
+	return &SpawnTool{
+		spawner:       spawner,
+		originChannel: "cli",
+		originChatID:  "direct",
+	}
+}
+
+// SetContext updates the origin channel/chatID before each agent turn.
+func (t *SpawnTool) SetContext(channel, chatID string) {
+	t.originChannel = channel
+	t.originChatID = chatID
+}
+
+func (t *SpawnTool) Name() string { return "spawn" }
+func (t *SpawnTool) Description() string {
+	return "Spawn a subagent to handle a task in the background. " +
+		"Use this for complex or time-consuming tasks that can run independently. " +
+		"The subagent will complete the task and report back when done."
+}
+func (t *SpawnTool) Parameters() json.RawMessage {
+	return json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"task": {
+				"type": "string",
+				"description": "The task for the subagent to complete"
+			},
+			"label": {
+				"type": "string",
+				"description": "Optional short label for the task (for display)"
+			}
+		},
+		"required": ["task"]
+	}`)
+}
+
+func (t *SpawnTool) Execute(ctx context.Context, params map[string]any) (string, error) {
+	task, _ := params["task"].(string)
+	if task == "" {
+		return "Error: task is required", nil
+	}
+	label, _ := params["label"].(string)
+
+	result, err := t.spawner.Spawn(ctx, task, label, t.originChannel, t.originChatID)
+	if err != nil {
+		return "Error spawning subagent: " + err.Error(), nil
+	}
+	return result, nil
+}
