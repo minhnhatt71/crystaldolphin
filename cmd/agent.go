@@ -12,11 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/agent"
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
-	"github.com/crystaldolphin/crystaldolphin/internal/cron"
-	"github.com/crystaldolphin/crystaldolphin/internal/providers"
+	"github.com/crystaldolphin/crystaldolphin/internal/container"
 )
 
 var (
@@ -54,18 +52,13 @@ func runAgent(_ *cobra.Command, _ []string) error {
 		// Production code would set a no-op slog handler; keeping simple here.
 	}
 
-	provider, err := buildProvider(cfg)
+	container, err := container.New(cfg)
 	if err != nil {
 		return err
 	}
 
-	msgBus := bus.NewMessageBus(100)
-
-	cronPath := config.DataDir() + "/cron/jobs.json"
-	cronMgr := cron.NewService(cronPath)
-
-	loop := agent.NewAgentLoop(msgBus, provider, cfg, "")
-	loop.SetCronTool(cronMgr)
+	loop := container.AgentLoop()
+	msgBus := container.MessageBus()
 
 	sessionKey := agentSession
 	channel, chatID := parseSessionKey(sessionKey)
@@ -161,37 +154,4 @@ func parseSessionKey(key string) (channel, chatID string) {
 		return key[:i], key[i+1:]
 	}
 	return "cli", key
-}
-
-func buildProvider(cfg *config.Config) (providers.LLMProvider, error) {
-	model := cfg.Agents.Defaults.Model
-	result := cfg.MatchProvider(model)
-
-	if result.Provider == nil && !isOAuthProvider(result.Name) {
-		return nil, fmt.Errorf("no API key configured for model %q — edit %s", model, config.ConfigPath())
-	}
-
-	apiKey := ""
-	apiBase := ""
-	var extraHeaders map[string]string
-	if result.Provider != nil {
-		apiKey = result.Provider.APIKey
-		apiBase = result.Provider.APIBase
-		extraHeaders = result.Provider.ExtraHeaders
-	}
-	if apiBase == "" {
-		apiBase = cfg.GetAPIBase(model)
-	}
-	return providers.New(providers.Params{
-		APIKey:       apiKey,
-		APIBase:      apiBase,
-		ExtraHeaders: extraHeaders,
-		DefaultModel: model,
-		ProviderName: result.Name,
-	}), nil
-}
-
-func isOAuthProvider(name string) bool {
-	spec := providers.FindByName(name)
-	return spec != nil && spec.IsOAuth
 }

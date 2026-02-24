@@ -3,7 +3,7 @@ MODULE   := github.com/crystaldolphin/crystaldolphin
 BUILD_FLAGS := -ldflags="-s -w"
 BUILD_DIR := build
 
-.PHONY: all build run dev clean bridge bridge-dev docker docker-up docker-down tidy
+.PHONY: all build run dev clean bridge bridge-dev docker docker-up docker-down tidy test
 
 # Default: build everything
 all: build bridge
@@ -37,6 +37,9 @@ docker-down:
 	docker compose down
 
 ## Utilities
+test:
+	go test ./...
+
 tidy:
 	go mod tidy
 

@@ -8,30 +8,30 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/config/agent"
-	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
-	"github.com/crystaldolphin/crystaldolphin/internal/config/gateway"
-	"github.com/crystaldolphin/crystaldolphin/internal/config/provider"
-	"github.com/crystaldolphin/crystaldolphin/internal/config/tool"
+	agentcfg "github.com/crystaldolphin/crystaldolphin/internal/config/agent"
+	channelcfg "github.com/crystaldolphin/crystaldolphin/internal/config/channel"
+	gatewaycfg "github.com/crystaldolphin/crystaldolphin/internal/config/gateway"
+	providercfg "github.com/crystaldolphin/crystaldolphin/internal/config/provider"
+	toolcfg "github.com/crystaldolphin/crystaldolphin/internal/config/tool"
 )
 
 // Config is the root configuration object, loaded from ~/.nanobot/config.json.
 type Config struct {
-	Agents    agent.AgentsConfig       `json:"agents"`
-	Channels  channel.ChannelsConfig   `json:"channels"`
-	Gateway   gateway.GatewayConfig    `json:"gateway"`
-	Tools     tool.ToolsConfig         `json:"tools"`
-	Providers provider.ProvidersConfig `json:"providers"`
+	Agents    agentcfg.AgentsConfig       `json:"agents"`
+	Channels  channelcfg.ChannelsConfig   `json:"channels"`
+	Gateway   gatewaycfg.GatewayConfig    `json:"gateway"`
+	Tools     toolcfg.ToolsConfig         `json:"tools"`
+	Providers providercfg.ProvidersConfig `json:"providers"`
 }
 
 // DefaultConfig returns a Config populated with all default values.
 func DefaultConfig() Config {
 	return Config{
-		Tools:     tool.DefaultToolConfigs(),
-		Agents:    agent.DefaultAgentsConfig(),
-		Gateway:   gateway.DefaultGatewayConfig(),
-		Channels:  channel.DefaultChannelsConfig(),
-		Providers: provider.DefaultProvidersConfig(),
+		Tools:     toolcfg.DefaultToolConfigs(),
+		Agents:    agentcfg.DefaultAgentsConfig(),
+		Gateway:   gatewaycfg.DefaultGatewayConfig(),
+		Channels:  channelcfg.DefaultChannelsConfig(),
+		Providers: providercfg.DefaultProvidersConfig(),
 	}
 }
 
@@ -52,6 +52,6 @@ func (c *Config) WorkspacePath() string {
 
 // ProviderByName returns a pointer to the ProviderConfig field matching the
 // given registry name. Returns nil if unknown.
-func (c *Config) ProviderByName(name string) *provider.ProviderConfig {
+func (c *Config) ProviderByName(name string) *providercfg.ProviderConfig {
 	return c.Providers.ByName(name)
 }

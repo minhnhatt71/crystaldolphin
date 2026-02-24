@@ -13,10 +13,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/agent"
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/channels"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/container"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 	"github.com/crystaldolphin/crystaldolphin/internal/heartbeat"
 )
@@ -52,7 +52,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	provider, err := buildProvider(cfg)
+	svc, err := container.New(cfg)
 	if err != nil {
 		return err
 	}
@@ -64,13 +64,9 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 	}
 	defer removePIDFile()
 
-	b := bus.NewMessageBus(100)
-
-	cronPath := config.DataDir() + "/cron/jobs.json"
-	cronSvc := cron.NewService(cronPath)
-
-	loop := agent.NewAgentLoop(b, provider, cfg, "")
-	loop.SetCronTool(cronSvc)
+	b := svc.MessageBus()
+	cronSvc := svc.CronService()
+	loop := svc.AgentLoop()
 
 	// Wire cron → agent callback.
 	cronSvc.SetOnJob(func(ctx context.Context, job cron.CronJob) (string, error) {

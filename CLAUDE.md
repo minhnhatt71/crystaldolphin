@@ -27,5 +27,6 @@ All common tasks are covered by the Makefile.
 | `make docker` | `docker compose build` |
 | `make docker-up` | Start services in the background |
 | `make docker-down` | Stop services |
+| `make test` | Run all Go tests |
 | `make tidy` | `go mod tidy` |
 | `make clean` | Remove binary and `bridge/dist/` |

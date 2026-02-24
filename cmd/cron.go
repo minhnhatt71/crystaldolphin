@@ -7,9 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/agent"
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/container"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 )
 
@@ -187,13 +186,11 @@ var cronRunCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
 		}
-		provider, err := buildProvider(cfg)
+		c, err := container.New(cfg)
 		if err != nil {
 			return err
 		}
-
-		b := bus.NewMessageBus(100)
-		loop := agent.NewAgentLoop(b, provider, cfg, "")
+		loop := c.AgentLoop()
 
 		svc := cron.NewService(cronStorePath())
 		svc.SetOnJob(func(ctx context.Context, job cron.CronJob) (string, error) {
