@@ -5,23 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 )
 
 // CronJobSummary is a lightweight view of a cron job used by the tool.
-type CronJobSummary struct {
-	ID   string
-	Name string
-	Kind string // "every", "cron", "at"
-}
+// The canonical definition lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+type CronJobSummary = interfaces.CronJobSummary
 
 // Service is the interface the CronTool uses to interact with the cron service.
-// Implemented by cron.Service. Defined here to avoid an import cycle.
-type Service interface {
-	AddJob(name, message string, kind string, everyMs int64, cronExpr, tz string, atMs int64,
-		deliver bool, channel, to string, deleteAfterRun bool) (id string, err error)
-	ListJobs() []CronJobSummary
-	RemoveJob(id string) bool
-}
+// The canonical definition lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+type Service = interfaces.CronService
 
 // CronTool allows the agent to schedule reminders and recurring tasks.
 type CronTool struct {

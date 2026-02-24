@@ -4,16 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 )
 
 // Tool is the interface all built-in and MCP-wrapped tools must satisfy.
-type Tool interface {
-	Name() string
-	Description() string
-	// Parameters returns the JSON Schema (as raw JSON bytes) for this tool's parameters.
-	Parameters() json.RawMessage
-	Execute(ctx context.Context, params map[string]any) (string, error)
-}
+// The canonical definition lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+type Tool = interfaces.Tool
 
 // Registry holds a set of named tools and exposes them for execution.
 type Registry struct {

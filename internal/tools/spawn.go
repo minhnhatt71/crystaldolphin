@@ -3,13 +3,14 @@ package tools
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 )
 
 // Spawner is the interface the SpawnTool uses to create background subagents.
-// Implemented by agent.SubagentManager. Defined here to avoid an import cycle.
-type Spawner interface {
-	Spawn(ctx context.Context, task, label, originChannel, originChatID string) (string, error)
-}
+// The canonical definition lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+type Spawner = interfaces.Spawner
 
 // SpawnTool spawns a background subagent to handle a task asynchronously.
 type SpawnTool struct {

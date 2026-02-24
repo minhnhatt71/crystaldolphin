@@ -2,23 +2,18 @@
 package channels
 
 import (
-	"context"
 	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 )
 
 // Channel is the interface every platform must implement.
-type Channel interface {
-	// Name returns the unique channel identifier (e.g. "telegram").
-	Name() string
-	// Start begins listening; it should block until ctx is cancelled.
-	Start(ctx context.Context) error
-	// Send delivers an outbound message.
-	Send(ctx context.Context, msg bus.OutboundMessage) error
-}
+// The canonical definition lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+type Channel = interfaces.Channel
 
 // Base holds common state and helper methods shared by all channels.
 type Base struct {
