@@ -202,11 +202,13 @@ func (m *FileMemoryStore) Consolidate(ctx context.Context,
 	}
 
 	// Advance the consolidation pointer.
+	// Use len(msgs) from the cloned snapshot taken before the LLM call,
+	// not s.Messages.Messages which may have grown concurrently.
 	s.Lock()
 	if archiveAll {
 		s.LastConsolidated = 0
 	} else {
-		s.LastConsolidated = len(s.Messages.Messages) - keepCount
+		s.LastConsolidated = len(msgs) - keepCount
 	}
 	s.Unlock()
 

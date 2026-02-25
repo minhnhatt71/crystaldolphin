@@ -19,6 +19,11 @@ func NewMessages(msgs ...Message) Messages {
 	return Messages{Messages: out}
 }
 
+// Add appends a raw message. Callers should prefer the typed AddX methods
+func (mh *Messages) Add(msg Message) {
+	mh.Messages = append(mh.Messages, msg)
+}
+
 // AddSystem appends a system message.
 func (mh *Messages) AddSystem(content string) {
 	mh.Messages = append(mh.Messages, Message{

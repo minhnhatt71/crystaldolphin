@@ -165,6 +165,7 @@ func (al *AgentLoop) processMessage(
 	if key == "" {
 		key = msg.SessionKey()
 	}
+
 	sess := al.sessions.GetOrCreate(key)
 
 	// Slash commands.
@@ -183,6 +184,7 @@ func (al *AgentLoop) processMessage(
 				_ = mem.Consolidate(ctx, tmp, al.provider, al.model, true, al.memoryWindow)
 			}
 		}()
+
 		return &bus.OutboundMessage{
 			Channel:  msg.Channel,
 			ChatID:   msg.ChatID,

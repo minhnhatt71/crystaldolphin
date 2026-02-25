@@ -24,83 +24,10 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
-// Session holds one conversation's messages and metadata.
-type Session struct {
-	Key              string
-	Messages         schema.Messages
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	Metadata         map[string]any
-	LastConsolidated int // number of messages already consolidated to MEMORY.md/HISTORY.md
-
-	mu sync.Mutex
-}
-
-// AddUser appends a user message to the session.
-func (s *Session) AddUser(content string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.Messages.AddUser(content)
-	s.UpdatedAt = time.Now()
-}
-
-// AddAssistant appends an assistant message to the session.
-func (s *Session) AddAssistant(content string, toolsUsed []string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	c := content
-	msg := schema.Message{
-		Role:      "assistant",
-		Content:   &c,
-		ToolsUsed: toolsUsed,
-	}
-	s.Messages.Messages = append(s.Messages.Messages, msg)
-	s.UpdatedAt = time.Now()
-}
-
-// GetHistory returns the last maxMessages messages for the LLM.
-func (s *Session) GetHistory(maxMessages int) schema.Messages {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	msgs := s.Messages.Messages
-	if maxMessages > 0 && len(msgs) > maxMessages {
-		msgs = msgs[len(msgs)-maxMessages:]
-	}
-
-	out := schema.NewMessages()
-	out.Messages = append(out.Messages, msgs...)
-	return out
-}
-
-// Len returns the number of messages in the session.
-func (s *Session) Len() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.Messages.Messages)
-}
-
-// Clear resets messages and the consolidation pointer.
-func (s *Session) Clear() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.Messages = schema.NewMessages()
-	s.LastConsolidated = 0
-	s.UpdatedAt = time.Now()
-}
-
-// Lock / Unlock expose the mutex so the agent loop can hold it across
-// multi-step operations (e.g. append → save atomically).
-func (s *Session) Lock()   { s.mu.Lock() }
-func (s *Session) Unlock() { s.mu.Unlock() }
-
-// ---------------------------------------------------------------------------
-
 // Manager loads and persists sessions as JSONL files.
 type Manager struct {
-	sessionsDir       string   // workspace/sessions/
-	legacySessionsDir string   // ~/.nanobot/sessions/ (migration only)
-	cache             sync.Map // key → *Session
+	sessionsDir string   // workspace/sessions/
+	cache       sync.Map // key → *Session
 }
 
 // NewManager creates a Manager rooted at the workspace directory.
@@ -111,13 +38,7 @@ func NewManager(workspace string) (*Manager, error) {
 		return nil, fmt.Errorf("create sessions dir: %w", err)
 	}
 
-	home, _ := os.UserHomeDir()
-	legacy := filepath.Join(home, ".nanobot", "sessions")
-
-	return &Manager{
-		sessionsDir:       dir,
-		legacySessionsDir: legacy,
-	}, nil
+	return &Manager{sessionsDir: dir}, nil
 }
 
 // GetOrCreate returns the cached session for key, loading from disk if needed,
@@ -152,6 +73,8 @@ func (m *Manager) Save(s *Session) error {
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false) // preserve non-ASCII, match Python ensure_ascii=False
 
+	s.mu.Lock()
+	msgs := s.Messages.Clone()
 	meta := map[string]any{
 		"_type":             "metadata",
 		"key":               s.Key,
@@ -160,17 +83,13 @@ func (m *Manager) Save(s *Session) error {
 		"metadata":          s.Metadata,
 		"last_consolidated": s.LastConsolidated,
 	}
+	s.mu.Unlock()
 
 	if err := enc.Encode(meta); err != nil {
 		return fmt.Errorf("encode metadata: %w", err)
 	}
 
-	s.mu.Lock()
-	msgs := make([]schema.Message, len(s.Messages.Messages))
-	copy(msgs, s.Messages.Messages)
-	s.mu.Unlock()
-
-	for _, msg := range msgs {
+	for _, msg := range msgs.Messages {
 		wire := messageToWire(msg)
 		if err := enc.Encode(wire); err != nil {
 			return fmt.Errorf("encode message: %w", err)
@@ -233,6 +152,7 @@ func (m *Manager) ListSessions() []map[string]any {
 			}
 		}
 	}
+
 	return out
 }
 
@@ -368,17 +288,6 @@ func safeFilename(name string) string {
 func (m *Manager) load(key string) *Session {
 	path := m.sessionPath(key)
 
-	// Migrate from ~/.nanobot/sessions/ if the session exists there.
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		legacyPath := filepath.Join(m.legacySessionsDir,
-			safeFilename(strings.ReplaceAll(key, ":", "_"))+".jsonl")
-		if _, err2 := os.Stat(legacyPath); err2 == nil {
-			if err3 := os.Rename(legacyPath, path); err3 == nil {
-				slog.Info("migrated session from legacy path", "key", key)
-			}
-		}
-	}
-
 	f, err := os.Open(path)
 	if err != nil {
 		return nil
@@ -421,7 +330,7 @@ func (m *Manager) load(key string) *Session {
 				lastConsolidated = int(lc)
 			}
 		} else {
-			messages.Messages = append(messages.Messages, wireToMessage(data))
+			messages.Add(wireToMessage(data))
 		}
 	}
 
