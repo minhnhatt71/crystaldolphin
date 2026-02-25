@@ -37,9 +37,9 @@ type AgentLoop struct {
 	workspace        string
 	builtinSkillsDir string
 
-	ctx      *ContextBuilder
-	sessions *session.Manager
-	tools    tools.ToolList
+	agentContext *ContextBuilder
+	sessions     *session.Manager
+	tools        tools.ToolList
 
 	subagents *SubagentManager
 
@@ -69,7 +69,7 @@ func NewAgentLoop(
 		model = provider.DefaultModel()
 	}
 
-	availableTools := tools.NewToolList([]schema.Tool{
+	ts := tools.NewToolList([]schema.Tool{
 		registry.Get(tools.ToolReadFile),
 		registry.Get(tools.ToolWriteFile),
 		registry.Get(tools.ToolEditFile),
@@ -93,9 +93,9 @@ func NewAgentLoop(
 		memoryWindow:     cfg.Agents.Defaults.MemoryWindow,
 		workspace:        workspace,
 		builtinSkillsDir: builtinSkillsDir,
-		ctx:              NewContextBuilder(workspace, builtinSkillsDir),
+		agentContext:     NewContextBuilder(workspace, builtinSkillsDir),
 		sessions:         sessions,
-		tools:            availableTools,
+		tools:            ts,
 		subagents:        subagents,
 		consolidating:    make(map[string]bool),
 	}
@@ -231,21 +231,21 @@ func (al *AgentLoop) processMessage(
 		al.consolidatingMu.Unlock()
 	}
 
-	// Inject per-turn context into stateful tools.
+	// Inject per-turn routing into the context so stateful tools can read it.
 	msgID := ""
 	if v, ok := msg.Metadata["message_id"].(string); ok {
 		msgID = v
 	}
-	al.setToolContext(msg.Channel, msg.ChatID, msgID)
+	msgSent := false
 
-	// Reset message tool send tracking.
-	if t := al.tools.Get("message"); t != nil {
-		if mt, ok := t.(*tools.MessageTool); ok {
-			mt.StartTurn()
-		}
-	}
+	ctx = tools.WithTurnContext(ctx, tools.TurnContext{
+		Channel:     msg.Channel,
+		ChatID:      msg.ChatID,
+		MsgID:       msgID,
+		MessageSent: &msgSent,
+	})
 
-	history := al.ctx.BuildMessages(
+	history := al.agentContext.BuildMessages(
 		sess.GetHistory(al.memoryWindow),
 		msg.Content,
 		msg.Media,
@@ -278,11 +278,9 @@ func (al *AgentLoop) processMessage(
 	sess.AddAssistant(finalContent, toolsUsed)
 	al.sessions.Save(sess)
 
-	// If the message tool sent something, suppress the return message.
-	if t := al.tools.Get("message"); t != nil {
-		if mt, ok := t.(*tools.MessageTool); ok && mt.WasSentInTurn() {
-			return nil
-		}
+	// If the message tool sent something, suppress the automatic reply.
+	if msgSent {
+		return nil
 	}
 
 	return &bus.OutboundMessage{
@@ -305,8 +303,8 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	key := channel + ":" + chatID
 	sess := al.sessions.GetOrCreate(key)
 
-	al.setToolContext(channel, chatID, "")
-	conversation := al.ctx.BuildMessages(
+	ctx = tools.WithTurnContext(ctx, tools.TurnContext{Channel: channel, ChatID: chatID})
+	conversation := al.agentContext.BuildMessages(
 		sess.GetHistory(al.memoryWindow),
 		msg.Content,
 		nil,
@@ -391,25 +389,6 @@ func (al *AgentLoop) runLoop(ctx context.Context, messages schema.Messages, onPr
 // Helpers
 // ---------------------------------------------------------------------------
 
-// setToolContext injects routing context into stateful tools.
-func (al *AgentLoop) setToolContext(channel, chatID, msgID string) {
-	if t := al.tools.Get("message"); t != nil {
-		if mt, ok := t.(*tools.MessageTool); ok {
-			mt.SetContext(channel, chatID, msgID)
-		}
-	}
-	if t := al.tools.Get("spawn"); t != nil {
-		if st, ok := t.(*tools.SpawnTool); ok {
-			st.SetContext(channel, chatID)
-		}
-	}
-	if t := al.tools.Get("cron"); t != nil {
-		if ct, ok := t.(*tools.CronTool); ok {
-			ct.SetContext(channel, chatID)
-		}
-	}
-}
-
 // connectMCPOnce connects to MCP servers the first time it is called.
 func (al *AgentLoop) connectMCPOnce(ctx context.Context) {
 	al.mcpOnce.Do(func() {
@@ -465,4 +444,3 @@ func truncate(s string, n int) string {
 	}
 	return s[:n] + "..."
 }
-

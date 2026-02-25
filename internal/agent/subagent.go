@@ -116,7 +116,7 @@ func (sm *SubagentManager) runSubagent(
 }
 
 func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
-	toolList := tools.NewToolListFromRegistry(sm.reg)
+	ts := sm.reg.GetAll()
 
 	messages := schema.NewMessages(
 		schema.NewSystemMessage(sm.buildSystemPrompt(task)),
@@ -125,11 +125,14 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 
 	const maxIter = 15
 	for i := 0; i < maxIter; i++ {
-		resp, err := sm.provider.Chat(ctx, messages, toolList.Definitions(), schema.ChatOptions{
-			Model:       sm.model,
-			MaxTokens:   sm.maxTokens,
-			Temperature: sm.temperature,
-		})
+		resp, err := sm.provider.Chat(
+			ctx, messages, ts.Definitions(),
+			schema.ChatOptions{
+				Model:       sm.model,
+				MaxTokens:   sm.maxTokens,
+				Temperature: sm.temperature,
+			},
+		)
 
 		if err != nil {
 			return "", err
@@ -162,7 +165,7 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 		for _, tc := range resp.ToolCalls {
 			slog.Debug("Subagent tool call", "id", taskID(ctx), "tool", tc.Name)
 
-			result, err := toolList.Get(tc.Name).Execute(ctx, tc.Arguments)
+			result, err := ts.Get(tc.Name).Execute(ctx, tc.Arguments)
 			if err != nil {
 				result = fmt.Sprintf("Error executing tool %s: %s", tc.Name, err)
 				slog.Error("Subagent tool execution failed", "id", taskID(ctx), "tool", tc.Name, "err", err)

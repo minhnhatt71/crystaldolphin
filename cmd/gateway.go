@@ -16,8 +16,8 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/channels"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
-	"github.com/crystaldolphin/crystaldolphin/internal/container"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
+	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
 	"github.com/crystaldolphin/crystaldolphin/internal/heartbeat"
 )
 
@@ -52,7 +52,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	svc, err := container.New(cfg)
+	svc, err := dependency.New(cfg)
 	if err != nil {
 		return err
 	}
@@ -64,12 +64,12 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 	}
 	defer removePIDFile()
 
-	b := svc.MessageBus()
-	cronSvc := svc.CronService()
+	messageBus := svc.MessageBus()
+	cronService := svc.CronService()
 	loop := svc.AgentLoop()
 
 	// Wire cron → agent callback.
-	cronSvc.SetOnJob(func(ctx context.Context, job cron.CronJob) (string, error) {
+	cronService.SetOnJob(func(ctx context.Context, job cron.CronJob) (string, error) {
 		sessionKey := "cron:" + job.ID
 		ch := ""
 		chatID := "direct"
@@ -85,7 +85,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 
 		resp := loop.ProcessDirect(ctx, job.Payload.Message, sessionKey, ch, chatID)
 		if job.Payload.Deliver && job.Payload.To != nil {
-			b.Outbound <- bus.OutboundMessage{
+			messageBus.Outbound <- bus.OutboundMessage{
 				Channel: ch,
 				ChatID:  chatID,
 				Content: resp,
@@ -106,7 +106,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 
 	g, gctx := errgroup.WithContext(ctx)
 
-	channelMgr := channels.NewManager(cfg, b)
+	channelMgr := channels.NewManager(cfg, messageBus)
 	if enabled := channelMgr.EnabledChannels(); len(enabled) > 0 {
 		fmt.Printf("✓ Channels enabled: %s\n", strings.Join(enabled, ", "))
 	} else {
@@ -114,7 +114,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 	}
 
 	g.Go(func() error { return loop.Run(gctx) })
-	g.Go(func() error { return cronSvc.Start(gctx) })
+	g.Go(func() error { return cronService.Start(gctx) })
 	g.Go(func() error { return hb.Start(gctx) })
 	g.Go(func() error { return channelMgr.StartAll(gctx) })
 

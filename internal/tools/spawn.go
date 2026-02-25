@@ -8,25 +8,14 @@ import (
 )
 
 // SpawnTool spawns a background subagent to handle a task asynchronously.
+// The origin channel/chatID for result delivery is read from TurnContext.
 type SpawnTool struct {
-	spawner       schema.Spawner
-	originChannel string
-	originChatID  string
+	spawner schema.Spawner
 }
 
 // NewSpawnTool creates a SpawnTool backed by the given Spawner.
 func NewSpawnTool(spawner schema.Spawner) *SpawnTool {
-	return &SpawnTool{
-		spawner:       spawner,
-		originChannel: "cli",
-		originChatID:  "direct",
-	}
-}
-
-// SetContext updates the origin channel/chatID before each agent turn.
-func (t *SpawnTool) SetContext(channel, chatID string) {
-	t.originChannel = channel
-	t.originChatID = chatID
+	return &SpawnTool{spawner: spawner}
 }
 
 // Name of the tool
@@ -64,7 +53,17 @@ func (t *SpawnTool) Execute(ctx context.Context, params map[string]any) (string,
 	}
 	label, _ := params["label"].(string)
 
-	result, err := t.spawner.Spawn(ctx, task, label, t.originChannel, t.originChatID)
+	tc := TurnCtx(ctx)
+	originChannel := tc.Channel
+	if originChannel == "" {
+		originChannel = "cli"
+	}
+	originChatID := tc.ChatID
+	if originChatID == "" {
+		originChatID = "direct"
+	}
+
+	result, err := t.spawner.Spawn(ctx, task, label, originChannel, originChatID)
 	if err != nil {
 		return "Error spawning subagent: " + err.Error(), nil
 	}

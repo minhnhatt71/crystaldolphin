@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
-	"github.com/crystaldolphin/crystaldolphin/internal/container"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
+	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
 )
 
 var cronCmd = &cobra.Command{
@@ -186,7 +186,7 @@ var cronRunCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
 		}
-		c, err := container.New(cfg)
+		c, err := dependency.New(cfg)
 		if err != nil {
 			return err
 		}

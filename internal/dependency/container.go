@@ -1,5 +1,5 @@
-// Package container wires core crystaldolphin services using go.uber.org/dig.
-package container
+// Package dependency wires core crystaldolphin services using go.uber.org/dig.
+package dependency
 
 import (
 	"fmt"
@@ -25,22 +25,22 @@ type Container struct {
 	cronSvc  *cron.JobManager
 }
 
-func (c *Container) Provider() schema.LLMProvider { return c.provider }
-func (c *Container) MessageBus() *bus.MessageBus     { return c.msgBus }
-func (c *Container) AgentLoop() *agent.AgentLoop     { return c.loop }
-func (c *Container) CronService() *cron.JobManager   { return c.cronSvc }
+func (c *Container) Provider() schema.LLMProvider  { return c.provider }
+func (c *Container) MessageBus() *bus.MessageBus   { return c.msgBus }
+func (c *Container) AgentLoop() *agent.AgentLoop   { return c.loop }
+func (c *Container) CronService() *cron.JobManager { return c.cronSvc }
 
-// llmModelKey is a named string type so dig can distinguish it from plain
+// LLMModel is a named string type so dig can distinguish it from plain
 // strings when injecting the effective model name into providers that need it.
-type llmModelKey string
+type LLMModel string
 
-// agentRegistry wraps the full tool registry used by the main agent loop.
-type agentRegistry struct{ *tools.Registry }
+// AgentRegistry wraps the full tool registry used by the main agent loop.
+type AgentRegistry struct{ *tools.Registry }
 
-// subagentRegistry wraps the restricted tool registry used by subagents.
+// SubagentRegistry wraps the restricted tool registry used by subagents.
 // It must not contain spawn or message tools to prevent recursion and
 // unsolicited outbound messages.
-type subagentRegistry struct{ *tools.Registry }
+type SubagentRegistry struct{ *tools.Registry }
 
 // New builds and wires all core services from cfg.
 func New(cfg *config.Config) (*Container, error) {
@@ -70,7 +70,7 @@ func New(cfg *config.Config) (*Container, error) {
 	if err := d.Provide(newSubagentManager); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newAgentToolRegistry); err != nil {
+	if err := d.Provide(newAgentRegistry); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newAgentLoop); err != nil {
@@ -141,16 +141,16 @@ func newCronService(cfg *config.Config) *cron.JobManager {
 	return cron.NewService(cronPath)
 }
 
-func resolveLLMModel(cfg *config.Config, p schema.LLMProvider) llmModelKey {
+func resolveLLMModel(cfg *config.Config, p schema.LLMProvider) LLMModel {
 	m := cfg.Agents.Defaults.Model
 	if m == "" {
 		m = p.DefaultModel()
 	}
 
-	return llmModelKey(m)
+	return LLMModel(m)
 }
 
-func newSubAgentToolRegistry(cfg *config.Config) subagentRegistry {
+func newSubAgentToolRegistry(cfg *config.Config) SubagentRegistry {
 	workspace := cfg.WorkspacePath()
 	allowedDir := ""
 	if cfg.Tools.RestrictToWorkspace {
@@ -166,10 +166,10 @@ func newSubAgentToolRegistry(cfg *config.Config) subagentRegistry {
 		WithTool(tools.NewWebFetchTool(0)).
 		Build()
 
-	return subagentRegistry{registry}
+	return SubagentRegistry{registry}
 }
 
-func newSubagentManager(p schema.LLMProvider, b *bus.MessageBus, cfg *config.Config, m llmModelKey, reg subagentRegistry) *agent.SubagentManager {
+func newSubagentManager(p schema.LLMProvider, b *bus.MessageBus, cfg *config.Config, m LLMModel, reg SubagentRegistry) *agent.SubagentManager {
 	return agent.NewSubagentManager(
 		p, cfg.WorkspacePath(), b,
 		string(m),
@@ -179,12 +179,12 @@ func newSubagentManager(p schema.LLMProvider, b *bus.MessageBus, cfg *config.Con
 	)
 }
 
-func newAgentToolRegistry(
+func newAgentRegistry(
 	cfg *config.Config,
 	b *bus.MessageBus,
 	subMgr *agent.SubagentManager,
 	cronMgr *cron.JobManager,
-) agentRegistry {
+) AgentRegistry {
 	workspace := cfg.WorkspacePath()
 	allowedDir := ""
 	if cfg.Tools.RestrictToWorkspace {
@@ -204,7 +204,7 @@ func newAgentToolRegistry(
 		WithTool(tools.NewCronTool(cronMgr)).
 		Build()
 
-	return agentRegistry{registry}
+	return AgentRegistry{registry}
 }
 
 func newAgentLoop(
@@ -213,7 +213,7 @@ func newAgentLoop(
 	cfg *config.Config,
 	sessions *session.Manager,
 	subMgr *agent.SubagentManager,
-	reg agentRegistry,
+	reg AgentRegistry,
 ) *agent.AgentLoop {
 	return agent.NewAgentLoop(b, p, cfg, sessions, reg.Registry, subMgr, "")
 }

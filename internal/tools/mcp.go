@@ -14,7 +14,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
 )
 
 // MCPServerConfig is the configuration for a single MCP server.
@@ -312,14 +311,10 @@ func (c *MCPClient) callHTTP(ctx context.Context, method string, params any) (js
 	return json.RawMessage(result), nil
 }
 
-// ---------------------------------------------------------------------------
-// ConnectMCPServers — top-level connection helper
-// ---------------------------------------------------------------------------
-
 // ConnectMCPServers connects to all configured MCP servers and registers
 // their tools into the given Registry. Non-fatal: failed servers are logged
 // and skipped. Returns a cleanup function that stops all subprocess servers.
-func ConnectMCPServers(ctx context.Context, servers map[string]MCPServerConfig, availTools *ToolList) func() {
+func ConnectMCPServers(ctx context.Context, servers map[string]MCPServerConfig, ts *ToolList) func() {
 	var clients []*MCPClient
 
 	for name, cfg := range servers {
@@ -356,7 +351,7 @@ func ConnectMCPServers(ctx context.Context, servers map[string]MCPServerConfig, 
 				parameters:  json.RawMessage(schemaBytes),
 			}
 
-			availTools.Add(wrapper)
+			ts.Add(wrapper)
 
 			slog.Debug("MCP tool registered", "server", name, "tool", wrapper.name)
 		}

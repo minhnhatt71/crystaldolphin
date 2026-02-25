@@ -10,21 +10,14 @@ import (
 )
 
 // CronTool allows the agent to schedule reminders and recurring tasks.
+// The delivery channel/chatID for new jobs is read from TurnContext.
 type CronTool struct {
-	svc     schema.CronService
-	channel string
-	chatID  string
+	svc schema.CronService
 }
 
-// NewCronTool creates a CronTool backed by the given CronTool.
+// NewCronTool creates a CronTool backed by the given CronService.
 func NewCronTool(svc schema.CronService) *CronTool {
 	return &CronTool{svc: svc}
-}
-
-// SetContext updates the channel/chatID for delivery before each turn.
-func (t *CronTool) SetContext(channel, chatID string) {
-	t.channel = channel
-	t.chatID = chatID
 }
 
 func (t *CronTool) Name() string { return "cron" }
@@ -71,11 +64,11 @@ func (t *CronTool) Parameters() json.RawMessage {
 	}`)
 }
 
-func (t *CronTool) Execute(_ context.Context, params map[string]any) (string, error) {
+func (t *CronTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	action, _ := params["action"].(string)
 	switch action {
 	case "add":
-		return t.addJob(params), nil
+		return t.addJob(ctx, params), nil
 	case "list":
 		return t.listJobs(), nil
 	case "remove":
@@ -85,12 +78,14 @@ func (t *CronTool) Execute(_ context.Context, params map[string]any) (string, er
 	}
 }
 
-func (t *CronTool) addJob(params map[string]any) string {
+func (t *CronTool) addJob(ctx context.Context, params map[string]any) string {
 	message, _ := params["message"].(string)
 	if message == "" {
 		return "Error: message is required for add"
 	}
-	if t.channel == "" || t.chatID == "" {
+
+	tc := TurnCtx(ctx)
+	if tc.Channel == "" || tc.ChatID == "" {
 		return "Error: no session context (channel/chat_id)"
 	}
 
@@ -129,8 +124,9 @@ func (t *CronTool) addJob(params map[string]any) string {
 		name = name[:30]
 	}
 
-	id, err := t.svc.AddJob(name, message, kind, everyMs, cronExpr, tz, atMs,
-		true, t.channel, t.chatID, deleteAfterRun)
+	id, err := t.svc.AddJob(
+		name, message, kind, everyMs, cronExpr, tz, atMs,
+		true, tc.Channel, tc.ChatID, deleteAfterRun)
 	if err != nil {
 		return fmt.Sprintf("Error creating job: %v", err)
 	}

@@ -14,7 +14,7 @@ import (
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
-	"github.com/crystaldolphin/crystaldolphin/internal/container"
+	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
 )
 
 var (
@@ -52,7 +52,7 @@ func runAgent(_ *cobra.Command, _ []string) error {
 		// Production code would set a no-op slog handler; keeping simple here.
 	}
 
-	container, err := container.New(cfg)
+	container, err := dependency.New(cfg)
 	if err != nil {
 		return err
 	}

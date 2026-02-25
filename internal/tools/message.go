@@ -9,33 +9,16 @@ import (
 )
 
 // MessageTool sends a message to the user on a chat channel.
-// It holds per-turn context (channel, chat_id) set by the agent loop before each turn.
+// Routing (channel, chat_id, message_id) is read from the TurnContext stored
+// in the context passed to Execute — no mutable per-turn state on the struct.
 type MessageTool struct {
-	bus            *bus.MessageBus
-	defaultChannel string
-	defaultChatID  string
-	defaultMsgID   string
-	sentInTurn     bool
+	bus *bus.MessageBus
 }
 
 // NewMessageTool creates a MessageTool backed by a MessageBus.
 func NewMessageTool(b *bus.MessageBus) *MessageTool {
 	return &MessageTool{bus: b}
 }
-
-// SetContext updates the default channel/chatID/msgID for the current turn.
-// Called by the agent loop before each LLM iteration.
-func (t *MessageTool) SetContext(channel, chatID, msgID string) {
-	t.defaultChannel = channel
-	t.defaultChatID = chatID
-	t.defaultMsgID = msgID
-}
-
-// StartTurn resets the per-turn sent flag.
-func (t *MessageTool) StartTurn() { t.sentInTurn = false }
-
-// WasSentInTurn reports whether a message was sent during the current turn.
-func (t *MessageTool) WasSentInTurn() bool { return t.sentInTurn }
 
 func (t *MessageTool) Name() string        { return "message" }
 func (t *MessageTool) Description() string { return "Send a message to the user. Use this when you want to communicate something." }
@@ -65,21 +48,23 @@ func (t *MessageTool) Parameters() json.RawMessage {
 	}`)
 }
 
-func (t *MessageTool) Execute(_ context.Context, params map[string]any) (string, error) {
+func (t *MessageTool) Execute(ctx context.Context, params map[string]any) (string, error) {
 	content, _ := params["content"].(string)
 	if content == "" {
 		return "Error: content is required", nil
 	}
 
-	channel := t.defaultChannel
+	tc := TurnCtx(ctx)
+
+	channel := tc.Channel
 	if ch, ok := params["channel"].(string); ok && ch != "" {
 		channel = ch
 	}
-	chatID := t.defaultChatID
+	chatID := tc.ChatID
 	if cid, ok := params["chat_id"].(string); ok && cid != "" {
 		chatID = cid
 	}
-	msgID := t.defaultMsgID
+	msgID := tc.MsgID
 	if mid, ok := params["message_id"].(string); ok && mid != "" {
 		msgID = mid
 	}
@@ -109,7 +94,10 @@ func (t *MessageTool) Execute(_ context.Context, params map[string]any) (string,
 		Media:    media,
 		Metadata: metadata,
 	}
-	t.sentInTurn = true
+
+	if tc.MessageSent != nil {
+		*tc.MessageSent = true
+	}
 
 	info := ""
 	if len(media) > 0 {

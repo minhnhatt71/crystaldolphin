@@ -20,16 +20,6 @@ func NewToolList(ts []schema.Tool) ToolList {
 	return list
 }
 
-// NewToolListFromRegistry builds a fresh ToolList from all tools in a Registry.
-// Each call allocates a new map, so the result is isolated from the source.
-func NewToolListFromRegistry(r *Registry) ToolList {
-	list := ToolList{tools: make(map[string]schema.Tool, len(r.tools))}
-	for k, t := range r.tools {
-		list.tools[k] = t
-	}
-	return list
-}
-
 func (r *ToolList) Get(name string) schema.Tool {
 	return r.tools[name]
 }
