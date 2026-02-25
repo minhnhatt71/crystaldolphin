@@ -190,11 +190,12 @@ func (m *MemoryStore) Consolidate(
 		joinStrings(lines, "\n"),
 	)
 
+	messages := NewMessageHistory()
+	messages.AddSystem("You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation.")
+	messages.AddUser(prompt)
+
 	resp, err := provider.Chat(ctx,
-		[]map[string]any{
-			{"role": "system", "content": "You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation."},
-			{"role": "user", "content": prompt},
-		},
+		messages,
 		saveMemoryTool,
 		providers.ChatOptions{
 			Model:       model,
@@ -235,9 +236,8 @@ func (m *MemoryStore) Consolidate(
 	}
 	s.Unlock()
 
-	slog.Info("memory consolidation done",
-		"messages", len(msgs),
-		"last_consolidated", s.LastConsolidated)
+	slog.Info("memory consolidation done", "messages", len(msgs), "last_consolidated", s.LastConsolidated)
+
 	return nil
 }
 

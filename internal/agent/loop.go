@@ -58,7 +58,7 @@ func NewAgentLoop(
 	b *bus.MessageBus,
 	provider providers.LLMProvider,
 	cfg *config.Config,
-	reg *tools.Registry,
+	registry *tools.Registry,
 	subagents *SubagentManager,
 	builtinSkillsDir string,
 ) *AgentLoop {
@@ -69,16 +69,16 @@ func NewAgentLoop(
 	}
 
 	toolList := tools.NewToolList([]tools.Tool{
-		reg.Get(tools.ToolReadFile),
-		reg.Get(tools.ToolWriteFile),
-		reg.Get(tools.ToolEditFile),
-		reg.Get(tools.ToolListDir),
-		reg.Get(tools.ToolExec),
-		reg.Get(tools.ToolWebSearch),
-		reg.Get(tools.ToolWebFetch),
-		reg.Get(tools.ToolMessage),
-		reg.Get(tools.ToolSpawn),
-		reg.Get(tools.ToolCron),
+		registry.Get(tools.ToolReadFile),
+		registry.Get(tools.ToolWriteFile),
+		registry.Get(tools.ToolEditFile),
+		registry.Get(tools.ToolListDir),
+		registry.Get(tools.ToolExec),
+		registry.Get(tools.ToolWebSearch),
+		registry.Get(tools.ToolWebFetch),
+		registry.Get(tools.ToolMessage),
+		registry.Get(tools.ToolSpawn),
+		registry.Get(tools.ToolCron),
 	})
 
 	return &AgentLoop{
@@ -250,7 +250,7 @@ func (al *AgentLoop) processMessage(
 		}
 	}
 
-	initialMessages := al.ctx.BuildMessages(
+	history := al.ctx.BuildMessages(
 		sess.GetHistory(al.memoryWindow),
 		msg.Content,
 		msg.Media,
@@ -271,7 +271,7 @@ func (al *AgentLoop) processMessage(
 		}
 	}
 
-	finalContent, toolsUsed := al.runLoop(ctx, initialMessages, onProgress)
+	finalContent, toolsUsed := al.runLoop(ctx, history, onProgress)
 	if finalContent == "" {
 		finalContent = "I've completed processing but have no response to give."
 	}
@@ -311,24 +311,24 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	slog.Info("Processing system message", "sender", msg.SenderID)
 
 	key := channel + ":" + chatID
-	sess := al.sessions.GetOrCreate(key)
+	session := al.sessions.GetOrCreate(key)
 
 	al.setToolContext(channel, chatID, "")
-	initialMessages := al.ctx.BuildMessages(
-		sess.GetHistory(al.memoryWindow),
+	conversation := al.ctx.BuildMessages(
+		session.GetHistory(al.memoryWindow),
 		msg.Content,
 		nil,
 		channel, chatID,
 	)
 
-	finalContent, _ := al.runLoop(ctx, initialMessages, nil)
+	finalContent, _ := al.runLoop(ctx, conversation, nil)
 	if finalContent == "" {
 		finalContent = "Background task completed."
 	}
 
-	sess.AddMessage("user", fmt.Sprintf("[System: %s] %s", msg.SenderID, msg.Content), nil)
-	sess.AddMessage("assistant", finalContent, nil)
-	al.sessions.Save(sess)
+	session.AddMessage("user", fmt.Sprintf("[System: %s] %s", msg.SenderID, msg.Content), nil)
+	session.AddMessage("assistant", finalContent, nil)
+	al.sessions.Save(session)
 
 	return &bus.OutboundMessage{
 		Channel: channel,
@@ -337,13 +337,14 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	}
 }
 
-func (al *AgentLoop) runLoop(ctx context.Context, messages []map[string]any, onProgress func(string)) (finalContent string, toolsUsed []string) {
+func (al *AgentLoop) runLoop(ctx context.Context, messages MessageHistory, onProgress func(string)) (finalContent string, toolsUsed []string) {
 	for i := 0; i < al.maxIter; i++ {
 		resp, err := al.provider.Chat(ctx, messages, al.tools.Definitions(), providers.ChatOptions{
 			Model:       al.model,
 			MaxTokens:   al.maxTokens,
 			Temperature: al.temperature,
 		})
+
 		if err != nil {
 			slog.Error("LLM error", "err", err)
 			return "Sorry, I encountered an error calling the LLM.", nil
@@ -368,20 +369,12 @@ func (al *AgentLoop) runLoop(ctx context.Context, messages []map[string]any, onP
 			onProgress(toolHint(resp.ToolCalls))
 		}
 
-		// Build tool_calls array for the assistant message.
-		var tcDicts []map[string]any
+		// Append assistant turn with tool calls.
+		var toolCalls []ToolCallDict
 		for _, tc := range resp.ToolCalls {
-			argsJSON, _ := json.Marshal(tc.Arguments)
-			tcDicts = append(tcDicts, map[string]any{
-				"id":   tc.ID,
-				"type": "function",
-				"function": map[string]any{
-					"name":      tc.Name,
-					"arguments": string(argsJSON),
-				},
-			})
+			toolCalls = append(toolCalls, ToolCallDict{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments})
 		}
-		messages = al.ctx.AddAssistantMessage(messages, resp.Content, tcDicts, resp.ReasoningContent)
+		messages.AddAssistant(resp.Content, toolCalls, resp.ReasoningContent)
 
 		// Execute each tool.
 		for _, tc := range resp.ToolCalls {
@@ -389,7 +382,7 @@ func (al *AgentLoop) runLoop(ctx context.Context, messages []map[string]any, onP
 			argsJSON, _ := json.Marshal(tc.Arguments)
 			slog.Info("Tool call", "name", tc.Name, "args", truncate(string(argsJSON), 200))
 			result, _ := al.tools.Get(tc.Name).Execute(ctx, tc.Arguments)
-			messages = al.ctx.AddToolResult(messages, tc.ID, tc.Name, result)
+			messages.AddToolResult(tc.ID, tc.Name, result)
 		}
 	}
 

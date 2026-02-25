@@ -32,6 +32,14 @@ func (c *Container) CronService() *cron.JobManager   { return c.cronSvc }
 // strings when injecting the effective model name into providers that need it.
 type llmModelKey string
 
+// agentRegistry wraps the full tool registry used by the main agent loop.
+type agentRegistry struct{ *tools.Registry }
+
+// subagentRegistry wraps the restricted tool registry used by subagents.
+// It must not contain spawn or message tools to prevent recursion and
+// unsolicited outbound messages.
+type subagentRegistry struct{ *tools.Registry }
+
 // New builds and wires all core services from cfg.
 func New(cfg *config.Config) (*Container, error) {
 	d := dig.New()
@@ -51,10 +59,13 @@ func New(cfg *config.Config) (*Container, error) {
 	if err := d.Provide(newCronService); err != nil {
 		return nil, err
 	}
+	if err := d.Provide(newSubAgentToolRegistry); err != nil {
+		return nil, err
+	}
 	if err := d.Provide(newSubagentManager); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newToolRegistry); err != nil {
+	if err := d.Provide(newAgentToolRegistry); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newAgentLoop); err != nil {
@@ -130,33 +141,48 @@ func resolveLLMModel(cfg *config.Config, p providers.LLMProvider) llmModelKey {
 	return llmModelKey(m)
 }
 
-func newSubagentManager(p providers.LLMProvider, b *bus.MessageBus, cfg *config.Config, m llmModelKey, reg *tools.Registry) *agent.SubagentManager {
-	workspace := cfg.WorkspacePath()
-
-	return agent.NewSubagentManager(
-		p, workspace, b,
-		string(m),
-		cfg.Agents.Defaults.Temperature,
-		cfg.Agents.Defaults.MaxTokens,
-		reg,
-	)
-}
-
-func newToolRegistry(
-	cfg *config.Config,
-	b *bus.MessageBus,
-	subMgr *agent.SubagentManager,
-	cronMgr *cron.JobManager,
-) *tools.Registry {
+func newSubAgentToolRegistry(cfg *config.Config) subagentRegistry {
 	workspace := cfg.WorkspacePath()
 	allowedDir := ""
 	if cfg.Tools.RestrictToWorkspace {
 		allowedDir = workspace
 	}
 
-	builder := tools.NewRegistryBuilder()
+	registry := tools.NewRegistryBuilder().
+		WithTool(tools.NewReadFileTool(workspace, allowedDir)).
+		WithTool(tools.NewWriteFileTool(workspace, allowedDir)).
+		WithTool(tools.NewEditFileTool(workspace, allowedDir)).
+		WithTool(tools.NewExecTool(workspace, cfg.Tools.Exec.Timeout, cfg.Tools.RestrictToWorkspace)).
+		WithTool(tools.NewWebSearchTool(cfg.Tools.Web.Search.APIKey, cfg.Tools.Web.Search.MaxResults)).
+		WithTool(tools.NewWebFetchTool(0)).
+		Build()
 
-	return builder.
+	return subagentRegistry{registry}
+}
+
+func newSubagentManager(p providers.LLMProvider, b *bus.MessageBus, cfg *config.Config, m llmModelKey, reg subagentRegistry) *agent.SubagentManager {
+	return agent.NewSubagentManager(
+		p, cfg.WorkspacePath(), b,
+		string(m),
+		cfg.Agents.Defaults.Temperature,
+		cfg.Agents.Defaults.MaxTokens,
+		reg.Registry,
+	)
+}
+
+func newAgentToolRegistry(
+	cfg *config.Config,
+	b *bus.MessageBus,
+	subMgr *agent.SubagentManager,
+	cronMgr *cron.JobManager,
+) agentRegistry {
+	workspace := cfg.WorkspacePath()
+	allowedDir := ""
+	if cfg.Tools.RestrictToWorkspace {
+		allowedDir = workspace
+	}
+
+	registry := tools.NewRegistryBuilder().
 		WithTool(tools.NewReadFileTool(workspace, allowedDir)).
 		WithTool(tools.NewWriteFileTool(workspace, allowedDir)).
 		WithTool(tools.NewEditFileTool(workspace, allowedDir)).
@@ -168,6 +194,8 @@ func newToolRegistry(
 		WithTool(tools.NewSpawnTool(subMgr)).
 		WithTool(tools.NewCronTool(cronMgr)).
 		Build()
+
+	return agentRegistry{registry}
 }
 
 func newAgentLoop(
@@ -175,7 +203,7 @@ func newAgentLoop(
 	p providers.LLMProvider,
 	cfg *config.Config,
 	subMgr *agent.SubagentManager,
-	reg *tools.Registry,
+	reg agentRegistry,
 ) *agent.AgentLoop {
-	return agent.NewAgentLoop(b, p, cfg, reg, subMgr, "")
+	return agent.NewAgentLoop(b, p, cfg, reg.Registry, subMgr, "")
 }

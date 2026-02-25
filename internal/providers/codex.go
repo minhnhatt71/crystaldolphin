@@ -50,7 +50,7 @@ func (p *CodexProvider) DefaultModel() string { return p.defaultModel }
 // Chat implements LLMProvider using the Codex Responses API (SSE).
 func (p *CodexProvider) Chat(
 	ctx context.Context,
-	messages []map[string]any,
+	messages MessageHistory,
 	tools []map[string]any,
 	opts ChatOptions,
 ) (LLMResponse, error) {
@@ -270,25 +270,33 @@ func consumeCodexSSE(body io.Reader) (string, []ToolCallRequest, string, error) 
 // Message / tool conversion helpers
 // ---------------------------------------------------------------------------
 
-func convertMessagesForCodex(messages []map[string]any) (string, []any) {
+func convertMessagesForCodex(messages MessageHistory) (string, []any) {
 	var system string
 	var items []any
 
-	for idx, msg := range messages {
-		role, _ := msg["role"].(string)
-		content := msg["content"]
-
-		switch role {
+	for idx, msg := range messages.Messages {
+		switch msg.Role {
 		case "system":
-			if s, ok := content.(string); ok {
+			if s, ok := msg.Content.(string); ok {
 				system = s
 			}
 
 		case "user":
-			items = append(items, convertCodexUserMessage(content))
+			items = append(items, convertCodexUserMessage(msg.Content))
 
 		case "assistant":
-			if s, ok := content.(string); ok && s != "" {
+			if s, ok := msg.Content.(*string); ok && s != nil && *s != "" {
+				items = append(items, map[string]any{
+					"type": "message",
+					"role": "assistant",
+					"content": []any{map[string]any{
+						"type": "output_text",
+						"text": *s,
+					}},
+					"status": "completed",
+					"id":     fmt.Sprintf("msg_%d", idx),
+				})
+			} else if s, ok := msg.Content.(string); ok && s != "" {
 				items = append(items, map[string]any{
 					"type": "message",
 					"role": "assistant",
@@ -300,42 +308,33 @@ func convertMessagesForCodex(messages []map[string]any) (string, []any) {
 					"id":     fmt.Sprintf("msg_%d", idx),
 				})
 			}
-			if tcs, ok := msg["tool_calls"].([]any); ok {
-				for _, tc := range tcs {
-					tcm, ok := tc.(map[string]any)
-					if !ok {
-						continue
-					}
-					fn, _ := tcm["function"].(map[string]any)
-					rawID, _ := tcm["id"].(string)
-					callID, itemID := splitCodexToolCallID(rawID)
-					if callID == "" {
-						callID = fmt.Sprintf("call_%d", idx)
-					}
-					if itemID == "" {
-						itemID = fmt.Sprintf("fc_%d", idx)
-					}
-					args, _ := fn["arguments"].(string)
-					items = append(items, map[string]any{
-						"type":      "function_call",
-						"id":        itemID,
-						"call_id":   callID,
-						"name":      fn["name"],
-						"arguments": args,
-					})
+			for _, tc := range msg.ToolCalls {
+				callID, itemID := splitCodexToolCallID(tc.ID)
+				if callID == "" {
+					callID = fmt.Sprintf("call_%d", idx)
 				}
+				if itemID == "" {
+					itemID = fmt.Sprintf("fc_%d", idx)
+				}
+				argsJSON, _ := json.Marshal(tc.Arguments)
+				items = append(items, map[string]any{
+					"type":      "function_call",
+					"id":        itemID,
+					"call_id":   callID,
+					"name":      tc.Name,
+					"arguments": string(argsJSON),
+				})
 			}
 
 		case "tool":
-			callID, _ := splitCodexToolCallID(msg["tool_call_id"])
+			callID, _ := splitCodexToolCallID(msg.ToolCallID)
 			if callID == "" {
 				callID = "call_0"
 			}
-			output := anyToString(content)
 			items = append(items, map[string]any{
 				"type":    "function_call_output",
 				"call_id": callID,
-				"output":  output,
+				"output":  anyToString(msg.Content),
 			})
 		}
 	}
@@ -448,9 +447,9 @@ func splitCodexToolCallID(id any) (callID, itemID string) {
 	return s, ""
 }
 
-func codexCacheKey(messages []map[string]any) string {
+func codexCacheKey(messages MessageHistory) string {
 	// Simple deterministic hash using the JSON representation.
-	b, _ := json.Marshal(messages)
+	b, _ := json.Marshal(messages.Messages)
 	// Use a basic FNV-like approach rather than importing crypto/sha256 just for this.
 	h := uint64(14695981039346656037)
 	for _, c := range b {

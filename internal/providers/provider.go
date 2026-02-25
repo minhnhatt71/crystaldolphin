@@ -23,3 +23,33 @@ type LLMResponse = interfaces.LLMResponse
 // The canonical definition lives in internal/interfaces; this alias keeps
 // existing code compiling without changes.
 type LLMProvider = interfaces.LLMProvider
+
+// MessageHistory is the ordered list of messages exchanged with the LLM.
+// The canonical definition lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+type MessageHistory = interfaces.MessageHistory
+
+// NewMessageHistory returns an empty MessageHistory ready for use.
+// The canonical constructor lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+var NewMessageHistory = interfaces.NewMessageHistory
+
+// ToolCallDict is a typed representation of a tool-call request.
+// The canonical definition lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+type ToolCallDict = interfaces.ToolCallDict
+
+// Message is one typed entry in the conversation history.
+// The canonical definition lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+type Message = interfaces.Message
+
+// ContentBlock is a single block in a multimodal user message.
+// The canonical definition lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+type ContentBlock = interfaces.ContentBlock
+
+// ToolCall represents one function call in an assistant message.
+// The canonical definition lives in internal/interfaces; this alias keeps
+// existing code compiling without changes.
+type ToolCall = interfaces.ToolCall

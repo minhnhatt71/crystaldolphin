@@ -20,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 )
 
 // Session holds one conversation's messages and metadata.
@@ -54,10 +56,9 @@ func (s *Session) AddMessage(role, content string, extras map[string]any) {
 	s.UpdatedAt = time.Now()
 }
 
-// GetHistory returns the last maxMessages messages in LLM format.
-// Only role, content, tool_calls, tool_call_id, and name are included —
-// stripping session-only fields like timestamp and tools_used.
-func (s *Session) GetHistory(maxMessages int) []map[string]any {
+// GetHistory returns the last maxMessages messages as typed Messages for the LLM.
+// Session-only fields like timestamp and tools_used are stripped.
+func (s *Session) GetHistory(maxMessages int) interfaces.MessageHistory {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -66,21 +67,48 @@ func (s *Session) GetHistory(maxMessages int) []map[string]any {
 		msgs = msgs[len(msgs)-maxMessages:]
 	}
 
-	out := make([]map[string]any, 0, len(msgs))
+	out := interfaces.NewMessageHistory()
 	for _, m := range msgs {
-		entry := map[string]any{
-			"role":    m["role"],
-			"content": m["content"],
+		role, _ := m["role"].(string)
+		content := m["content"]
+		if content == nil {
+			content = ""
 		}
-		if entry["content"] == nil {
-			entry["content"] = ""
+
+		msg := interfaces.Message{
+			Role:    role,
+			Content: content,
 		}
-		for _, k := range []string{"tool_calls", "tool_call_id", "name"} {
-			if v, ok := m[k]; ok {
-				entry[k] = v
+
+		// Restore tool calls stored in session as []any of wire-format maps.
+		if tcs, ok := m["tool_calls"].([]any); ok {
+			for _, tc := range tcs {
+				tcm, ok := tc.(map[string]any)
+				if !ok {
+					continue
+				}
+				fn, _ := tcm["function"].(map[string]any)
+				id, _ := tcm["id"].(string)
+				name, _ := fn["name"].(string)
+				argsStr, _ := fn["arguments"].(string)
+				var args map[string]any
+				_ = json.Unmarshal([]byte(argsStr), &args)
+				msg.ToolCalls = append(msg.ToolCalls, interfaces.ToolCall{
+					ID:        id,
+					Name:      name,
+					Arguments: args,
+				})
 			}
 		}
-		out = append(out, entry)
+
+		if id, ok := m["tool_call_id"].(string); ok {
+			msg.ToolCallID = id
+		}
+		if name, ok := m["name"].(string); ok {
+			msg.ToolName = name
+		}
+
+		out.Messages = append(out.Messages, msg)
 	}
 	return out
 }
@@ -164,6 +192,7 @@ func (m *Manager) Save(s *Session) error {
 		"metadata":          s.Metadata,
 		"last_consolidated": s.LastConsolidated,
 	}
+
 	if err := enc.Encode(meta); err != nil {
 		return fmt.Errorf("encode metadata: %w", err)
 	}

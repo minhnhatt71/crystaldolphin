@@ -12,12 +12,6 @@ import (
 	"time"
 )
 
-// allowedMsgKeys are the only message fields passed to the LLM.
-// Extras like "timestamp" and "tools_used" are stripped — some providers reject unknown keys.
-var allowedMsgKeys = map[string]bool{
-	"role": true, "content": true, "tool_calls": true,
-	"tool_call_id": true, "name": true,
-}
 
 // OpenAIProvider makes direct HTTP calls to any OpenAI-compatible endpoint,
 // and also handles the Anthropic Messages API as a special case.
@@ -81,7 +75,7 @@ func (p *OpenAIProvider) DefaultModel() string { return p.defaultModel }
 // Chat implements LLMProvider. It dispatches to Anthropic or OpenAI-compat paths.
 func (p *OpenAIProvider) Chat(
 	ctx context.Context,
-	messages []map[string]any,
+	messages MessageHistory,
 	tools []map[string]any,
 	opts ChatOptions,
 ) (LLMResponse, error) {
@@ -114,7 +108,7 @@ func (p *OpenAIProvider) Chat(
 
 func (p *OpenAIProvider) chatOpenAI(
 	ctx context.Context,
-	messages []map[string]any,
+	messages MessageHistory,
 	tools []map[string]any,
 	model string,
 	maxTokens int,
@@ -171,7 +165,7 @@ func (p *OpenAIProvider) chatOpenAI(
 
 func (p *OpenAIProvider) chatAnthropic(
 	ctx context.Context,
-	messages []map[string]any,
+	messages MessageHistory,
 	tools []map[string]any,
 	model string,
 	maxTokens int,
@@ -297,14 +291,15 @@ func (p *OpenAIProvider) supportsPromptCaching(model string) bool {
 
 // applyCacheControl injects cache_control ephemeral blocks on the last system
 // message content block and the last tool definition.
-func applyCacheControl(messages []map[string]any, tools []map[string]any) ([]map[string]any, []map[string]any) {
-	out := make([]map[string]any, len(messages))
-	for i, msg := range messages {
-		if msg["role"] == "system" {
-			newMsg := copyMap(msg)
-			switch c := msg["content"].(type) {
+func applyCacheControl(messages MessageHistory, tools []map[string]any) (MessageHistory, []map[string]any) {
+	out := NewMessageHistory()
+	out.Messages = make([]Message, len(messages.Messages))
+	for i, msg := range messages.Messages {
+		if msg.Role == "system" {
+			newMsg := msg
+			switch c := msg.Content.(type) {
 			case string:
-				newMsg["content"] = []any{
+				newMsg.Content = []any{
 					map[string]any{"type": "text", "text": c, "cache_control": map[string]any{"type": "ephemeral"}},
 				}
 			case []any:
@@ -317,11 +312,11 @@ func applyCacheControl(messages []map[string]any, tools []map[string]any) ([]map
 						arr[len(arr)-1] = last
 					}
 				}
-				newMsg["content"] = arr
+				newMsg.Content = arr
 			}
-			out[i] = newMsg
+			out.Messages[i] = newMsg
 		} else {
-			out[i] = msg
+			out.Messages[i] = msg
 		}
 	}
 
@@ -340,22 +335,39 @@ func applyCacheControl(messages []map[string]any, tools []map[string]any) ([]map
 // Message sanitisation
 // ---------------------------------------------------------------------------
 
-func sanitizeMessages(messages []map[string]any) []map[string]any {
-	out := make([]map[string]any, 0, len(messages))
-	for _, m := range messages {
-		clean := map[string]any{}
-		for k, v := range m {
-			if allowedMsgKeys[k] {
-				clean[k] = v
-			}
+// messageToWireMap converts a typed Message to the OpenAI wire-format map.
+func messageToWireMap(m Message) map[string]any {
+	wire := map[string]any{
+		"role":    m.Role,
+		"content": m.Content,
+	}
+	if m.Role == "assistant" {
+		// Strict providers require "content" even for tool-call-only messages.
+		if m.Content == nil {
+			wire["content"] = nil
 		}
-		// Strict providers require "content" key even for tool-call-only assistant messages.
-		if clean["role"] == "assistant" {
-			if _, has := clean["content"]; !has {
-				clean["content"] = nil
+		if len(m.ToolCalls) > 0 {
+			raw := make([]map[string]any, len(m.ToolCalls))
+			for i, tc := range m.ToolCalls {
+				raw[i] = tc.ToWireMap()
 			}
+			wire["tool_calls"] = raw
 		}
-		out = append(out, clean)
+		if m.ReasoningContent != nil {
+			wire["reasoning_content"] = *m.ReasoningContent
+		}
+	}
+	if m.Role == "tool" {
+		wire["tool_call_id"] = m.ToolCallID
+		wire["name"] = m.ToolName
+	}
+	return wire
+}
+
+func sanitizeMessages(messages MessageHistory) []map[string]any {
+	out := make([]map[string]any, 0, len(messages.Messages))
+	for _, m := range messages.Messages {
+		out = append(out, messageToWireMap(m))
 	}
 	return out
 }
@@ -389,19 +401,16 @@ func (p *OpenAIProvider) applyModelOverrides(model string, body map[string]any) 
 // Anthropic format helpers
 // ---------------------------------------------------------------------------
 
-// convertMessagesToAnthropic converts OpenAI message format to Anthropic's.
+// convertMessagesToAnthropic converts typed messages to Anthropic's wire format.
 // Returns (system_prompt, converted_messages).
-func convertMessagesToAnthropic(messages []map[string]any) (string, []map[string]any) {
+func convertMessagesToAnthropic(messages MessageHistory) (string, []map[string]any) {
 	var system string
 	var out []map[string]any
 
-	for _, msg := range messages {
-		role, _ := msg["role"].(string)
-		content := msg["content"]
-
-		switch role {
+	for _, msg := range messages.Messages {
+		switch msg.Role {
 		case "system":
-			if s, ok := content.(string); ok {
+			if s, ok := msg.Content.(string); ok {
 				if system != "" {
 					system += "\n\n"
 				}
@@ -411,16 +420,14 @@ func convertMessagesToAnthropic(messages []map[string]any) (string, []map[string
 		case "user":
 			out = append(out, map[string]any{
 				"role":    "user",
-				"content": normalizeContentForAnthropic(content),
+				"content": normalizeContentForAnthropic(msg.Content),
 			})
 
 		case "tool":
-			// OpenAI tool result → Anthropic tool_result content block.
-			callID, _ := msg["tool_call_id"].(string)
 			block := map[string]any{
 				"type":        "tool_result",
-				"tool_use_id": callID,
-				"content":     anyToString(content),
+				"tool_use_id": msg.ToolCallID,
+				"content":     anyToString(msg.Content),
 			}
 			// Merge consecutive tool results into one user message.
 			if len(out) > 0 && out[len(out)-1]["role"] == "user" {
@@ -437,28 +444,18 @@ func convertMessagesToAnthropic(messages []map[string]any) (string, []map[string
 
 		case "assistant":
 			var blocks []any
-			if s, ok := content.(string); ok && s != "" {
+			if s, ok := msg.Content.(*string); ok && s != nil && *s != "" {
+				blocks = append(blocks, map[string]any{"type": "text", "text": *s})
+			} else if s, ok := msg.Content.(string); ok && s != "" {
 				blocks = append(blocks, map[string]any{"type": "text", "text": s})
 			}
-			if tcs, ok := msg["tool_calls"].([]any); ok {
-				for _, tc := range tcs {
-					tcm, ok := tc.(map[string]any)
-					if !ok {
-						continue
-					}
-					fn, _ := tcm["function"].(map[string]any)
-					id, _ := tcm["id"].(string)
-					name, _ := fn["name"].(string)
-					argsStr, _ := fn["arguments"].(string)
-					var input map[string]any
-					_ = json.Unmarshal([]byte(argsStr), &input)
-					blocks = append(blocks, map[string]any{
-						"type":  "tool_use",
-						"id":    id,
-						"name":  name,
-						"input": input,
-					})
-				}
+			for _, tc := range msg.ToolCalls {
+				blocks = append(blocks, map[string]any{
+					"type":  "tool_use",
+					"id":    tc.ID,
+					"name":  tc.Name,
+					"input": tc.Arguments,
+				})
 			}
 			if len(blocks) == 0 {
 				blocks = []any{map[string]any{"type": "text", "text": ""}}

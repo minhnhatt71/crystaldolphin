@@ -16,8 +16,25 @@ func NewToolList(ts []Tool) ToolList {
 	return list
 }
 
-func (r *ToolList) Get(name string) Tool { return r.tools[name] }
-func (r *ToolList) Add(t Tool) Tool      { r.tools[t.Name()] = t; return t }
+// NewToolListFromRegistry builds a fresh ToolList from all tools in a Registry.
+// Each call allocates a new map, so the result is isolated from the source.
+func NewToolListFromRegistry(r *Registry) ToolList {
+	list := ToolList{tools: make(map[string]Tool, len(r.tools))}
+	for k, t := range r.tools {
+		list.tools[k] = t
+	}
+	return list
+}
+
+func (r *ToolList) Get(name string) Tool {
+	return r.tools[name]
+}
+
+func (r *ToolList) Add(t Tool) Tool {
+	r.tools[t.Name()] = t
+
+	return t
+}
 
 // Definitions returns all tool definitions in OpenAI function-calling format.
 func (r *ToolList) Definitions() []map[string]any {

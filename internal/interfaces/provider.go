@@ -30,6 +30,6 @@ func (r LLMResponse) HasToolCalls() bool { return len(r.ToolCalls) > 0 }
 
 // LLMProvider is the interface every LLM backend must satisfy.
 type LLMProvider interface {
-	Chat(ctx context.Context, messages []map[string]any, tools []map[string]any, opts ChatOptions) (LLMResponse, error)
+	Chat(ctx context.Context, messages MessageHistory, tools []map[string]any, opts ChatOptions) (LLMResponse, error)
 	DefaultModel() string
 }

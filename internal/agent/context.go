@@ -137,23 +137,20 @@ func (cb *ContextBuilder) loadBootstrapFiles() string {
 // BuildMessages builds the complete message list for an LLM call.
 // Mirrors Python ContextBuilder.build_messages().
 func (cb *ContextBuilder) BuildMessages(
-	history []map[string]any,
+	history MessageHistory,
 	currentMessage string,
 	media []string,
 	channel, chatID string,
-) []map[string]any {
+) MessageHistory {
 	systemPrompt := cb.BuildSystemPrompt()
 	if channel != "" && chatID != "" {
 		systemPrompt += fmt.Sprintf("\n\n## Current Session\nChannel: %s\nChat ID: %s", channel, chatID)
 	}
 
-	messages := []map[string]any{
-		{"role": "system", "content": systemPrompt},
-	}
-	messages = append(messages, history...)
-
-	userContent := cb.buildUserContent(currentMessage, media)
-	messages = append(messages, map[string]any{"role": "user", "content": userContent})
+	messages := NewMessageHistory()
+	messages.AddSystem(systemPrompt)
+	messages.Append(history)
+	messages.AddUser(cb.buildUserContent(currentMessage, media))
 
 	return messages
 }
@@ -185,41 +182,6 @@ func (cb *ContextBuilder) buildUserContent(text string, media []string) any {
 		return text
 	}
 	return append(blocks, map[string]any{"type": "text", "text": text})
-}
-
-// AddToolResult appends a tool result message.
-// Mirrors Python ContextBuilder.add_tool_result().
-func (cb *ContextBuilder) AddToolResult(
-	messages []map[string]any,
-	toolCallID, toolName, result string,
-) []map[string]any {
-	return append(messages, map[string]any{
-		"role":         "tool",
-		"tool_call_id": toolCallID,
-		"name":         toolName,
-		"content":      result,
-	})
-}
-
-// AddAssistantMessage appends an assistant message (with optional tool_calls).
-// Mirrors Python ContextBuilder.add_assistant_message().
-func (cb *ContextBuilder) AddAssistantMessage(
-	messages []map[string]any,
-	content *string,
-	toolCalls []map[string]any,
-	reasoningContent *string,
-) []map[string]any {
-	msg := map[string]any{
-		"role":    "assistant",
-		"content": content, // may be nil
-	}
-	if len(toolCalls) > 0 {
-		msg["tool_calls"] = toolCalls
-	}
-	if reasoningContent != nil {
-		msg["reasoning_content"] = *reasoningContent
-	}
-	return append(messages, msg)
 }
 
 // expandHome replaces a leading "~" with the user's home directory.

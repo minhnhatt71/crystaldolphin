@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -32,6 +31,8 @@ type SubagentManager struct {
 }
 
 // NewSubagentManager creates a SubagentManager.
+// reg must be the subagent-scoped registry (no spawn/message tools).
+// A fresh ToolList is built from it on every execution, so runs are isolated.
 func NewSubagentManager(
 	provider providers.LLMProvider,
 	workspace string,
@@ -115,26 +116,15 @@ func (sm *SubagentManager) runSubagent(
 }
 
 func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
-	reg := sm.reg
+	toolList := tools.NewToolListFromRegistry(sm.reg)
 
-	availTools := tools.NewToolList([]tools.Tool{
-		reg.Get(tools.ToolCron),
-		reg.Get(tools.ToolEditFile),
-		reg.Get(tools.ToolReadFile),
-		reg.Get(tools.ToolWriteFile),
-		reg.Get(tools.ToolExec),
-		reg.Get(tools.ToolWebSearch),
-		reg.Get(tools.ToolWebFetch),
-	})
-
-	messages := []map[string]any{
-		{"role": "system", "content": sm.buildSystemPrompt(task)},
-		{"role": "user", "content": task},
-	}
+	messages := NewMessageHistory()
+	messages.AddSystem(sm.buildSystemPrompt(task))
+	messages.AddUser(task)
 
 	const maxIter = 15
 	for i := 0; i < maxIter; i++ {
-		resp, err := sm.provider.Chat(ctx, messages, availTools.Definitions(), providers.ChatOptions{
+		resp, err := sm.provider.Chat(ctx, messages, toolList.Definitions(), providers.ChatOptions{
 			Model:       sm.model,
 			MaxTokens:   sm.maxTokens,
 			Temperature: sm.temperature,
@@ -156,42 +146,31 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 		}
 
 		// Append assistant turn with tool calls.
-		var tcDicts []map[string]any
+		var toolCalls []ToolCallDict
 		for _, tc := range resp.ToolCalls {
-			argsJSON, _ := json.Marshal(tc.Arguments)
-			tcDicts = append(tcDicts, map[string]any{
-				"id":   tc.ID,
-				"type": "function",
-				"function": map[string]any{
-					"name":      tc.Name,
-					"arguments": string(argsJSON),
-				},
+			toolCalls = append(toolCalls, ToolCallDict{
+				ID:        tc.ID,
+				Name:      tc.Name,
+				Arguments: tc.Arguments,
 			})
 		}
 
-		contentVal := any(nil)
-		if resp.Content != nil {
-			contentVal = *resp.Content
-		}
-
-		messages = append(messages, map[string]any{
-			"role":       "assistant",
-			"content":    contentVal,
-			"tool_calls": tcDicts,
-		})
+		messages.AddAssistant(resp.Content, toolCalls, nil)
 
 		// Execute each tool.
 		for _, tc := range resp.ToolCalls {
 			slog.Debug("Subagent tool call", "id", taskID(ctx), "tool", tc.Name)
-			result := reg.Execute(ctx, tc.Name, tc.Arguments)
-			messages = append(messages, map[string]any{
-				"role":         "tool",
-				"tool_call_id": tc.ID,
-				"name":         tc.Name,
-				"content":      result,
-			})
+
+			result, err := toolList.Get(tc.Name).Execute(ctx, tc.Arguments)
+			if err != nil {
+				result = fmt.Sprintf("Error executing tool %s: %s", tc.Name, err)
+				slog.Error("Subagent tool execution failed", "id", taskID(ctx), "tool", tc.Name, "err", err)
+			}
+
+			messages.AddToolResult(tc.ID, tc.Name, result)
 		}
 	}
+
 	return "Task completed (max iterations reached).", nil
 }
 
