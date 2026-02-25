@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
 const (
@@ -47,17 +49,17 @@ func NewCodexProvider(defaultModel string) *CodexProvider {
 
 func (p *CodexProvider) DefaultModel() string { return p.defaultModel }
 
-// Chat implements LLMProvider using the Codex Responses API (SSE).
+// Chat implements schema.LLMProvider using the Codex Responses API (SSE).
 func (p *CodexProvider) Chat(
 	ctx context.Context,
-	messages MessageHistory,
+	messages schema.Messages,
 	tools []map[string]any,
-	opts ChatOptions,
-) (LLMResponse, error) {
+	opts schema.ChatOptions,
+) (schema.LLMResponse, error) {
 	token, err := p.loadToken()
 	if err != nil {
 		s := fmt.Sprintf("Codex token not found — run `crystaldolphin provider login openai-codex` first: %v", err)
-		return LLMResponse{Content: &s, FinishReason: "error"}, nil
+		return schema.LLMResponse{Content: &s, FinishReason: "error"}, nil
 	}
 
 	model := opts.Model
@@ -87,12 +89,12 @@ func (p *CodexProvider) Chat(
 
 	data, err := json.Marshal(body)
 	if err != nil {
-		return LLMResponse{}, fmt.Errorf("marshal codex request: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("marshal codex request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, codexURL, bytes.NewReader(data))
 	if err != nil {
-		return LLMResponse{}, fmt.Errorf("build codex request: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("build codex request: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
@@ -106,27 +108,27 @@ func (p *CodexProvider) Chat(
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		s := fmt.Sprintf("Error calling Codex: %v", err)
-		return LLMResponse{Content: &s, FinishReason: "error"}, nil
+		return schema.LLMResponse{Content: &s, FinishReason: "error"}, nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		s := codexFriendlyError(resp.StatusCode, raw)
-		return LLMResponse{Content: &s, FinishReason: "error"}, nil
+		return schema.LLMResponse{Content: &s, FinishReason: "error"}, nil
 	}
 
 	content, toolCalls, finish, err := consumeCodexSSE(resp.Body)
 	if err != nil {
 		s := fmt.Sprintf("Error reading Codex SSE: %v", err)
-		return LLMResponse{Content: &s, FinishReason: "error"}, nil
+		return schema.LLMResponse{Content: &s, FinishReason: "error"}, nil
 	}
 
 	var contentPtr *string
 	if content != "" {
 		contentPtr = &content
 	}
-	return LLMResponse{
+	return schema.LLMResponse{
 		Content:      contentPtr,
 		ToolCalls:    toolCalls,
 		FinishReason: finish,
@@ -137,7 +139,7 @@ func (p *CodexProvider) Chat(
 // SSE consumer
 // ---------------------------------------------------------------------------
 
-func consumeCodexSSE(body io.Reader) (string, []ToolCallRequest, string, error) {
+func consumeCodexSSE(body io.Reader) (string, []schema.ToolCallRequest, string, error) {
 	type tcBuf struct {
 		id        string
 		name      string
@@ -147,7 +149,7 @@ func consumeCodexSSE(body io.Reader) (string, []ToolCallRequest, string, error) 
 	var (
 		content      strings.Builder
 		tcBuffers    = map[string]*tcBuf{}
-		toolCalls    []ToolCallRequest
+		toolCalls    []schema.ToolCallRequest
 		finishReason = "stop"
 	)
 
@@ -236,7 +238,7 @@ func consumeCodexSSE(body io.Reader) (string, []ToolCallRequest, string, error) 
 				if itemID != "" {
 					combinedID = callID + "|" + itemID
 				}
-				toolCalls = append(toolCalls, ToolCallRequest{
+				toolCalls = append(toolCalls, schema.ToolCallRequest{
 					ID:        combinedID,
 					Name:      name,
 					Arguments: args,
@@ -270,7 +272,7 @@ func consumeCodexSSE(body io.Reader) (string, []ToolCallRequest, string, error) 
 // Message / tool conversion helpers
 // ---------------------------------------------------------------------------
 
-func convertMessagesForCodex(messages MessageHistory) (string, []any) {
+func convertMessagesForCodex(messages schema.Messages) (string, []any) {
 	var system string
 	var items []any
 
@@ -447,7 +449,7 @@ func splitCodexToolCallID(id any) (callID, itemID string) {
 	return s, ""
 }
 
-func codexCacheKey(messages MessageHistory) string {
+func codexCacheKey(messages schema.Messages) string {
 	// Simple deterministic hash using the JSON representation.
 	b, _ := messages.GetHashKey()
 

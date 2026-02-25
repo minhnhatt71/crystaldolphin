@@ -9,25 +9,15 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
-// CronJobSummary is a lightweight view of a cron job used by the tool.
-// The canonical definition lives in internal/interfaces; this alias keeps
-// existing code compiling without changes.
-type CronJobSummary = schema.CronJobSummary
-
-// Service is the interface the CronTool uses to interact with the cron service.
-// The canonical definition lives in internal/interfaces; this alias keeps
-// existing code compiling without changes.
-type Service = schema.CronService
-
 // CronTool allows the agent to schedule reminders and recurring tasks.
 type CronTool struct {
-	svc     Service
+	svc     schema.CronService
 	channel string
 	chatID  string
 }
 
 // NewCronTool creates a CronTool backed by the given CronTool.
-func NewCronTool(svc Service) *CronTool {
+func NewCronTool(svc schema.CronService) *CronTool {
 	return &CronTool{svc: svc}
 }
 

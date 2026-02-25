@@ -7,20 +7,15 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
-// Spawner is the interface the SpawnTool uses to create background subagents.
-// The canonical definition lives in internal/interfaces; this alias keeps
-// existing code compiling without changes.
-type Spawner = schema.Spawner
-
 // SpawnTool spawns a background subagent to handle a task asynchronously.
 type SpawnTool struct {
-	spawner       Spawner
+	spawner       schema.Spawner
 	originChannel string
 	originChatID  string
 }
 
 // NewSpawnTool creates a SpawnTool backed by the given Spawner.
-func NewSpawnTool(spawner Spawner) *SpawnTool {
+func NewSpawnTool(spawner schema.Spawner) *SpawnTool {
 	return &SpawnTool{
 		spawner:       spawner,
 		originChannel: "cli",

@@ -11,6 +11,7 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
 )
@@ -18,13 +19,13 @@ import (
 // Container holds the resolved core service singletons.
 // Callers use the typed getter methods; they never need to import dig directly.
 type Container struct {
-	provider providers.LLMProvider
+	provider schema.LLMProvider
 	msgBus   *bus.MessageBus
 	loop     *agent.AgentLoop
 	cronSvc  *cron.JobManager
 }
 
-func (c *Container) Provider() providers.LLMProvider { return c.provider }
+func (c *Container) Provider() schema.LLMProvider { return c.provider }
 func (c *Container) MessageBus() *bus.MessageBus     { return c.msgBus }
 func (c *Container) AgentLoop() *agent.AgentLoop     { return c.loop }
 func (c *Container) CronService() *cron.JobManager   { return c.cronSvc }
@@ -78,7 +79,7 @@ func New(cfg *config.Config) (*Container, error) {
 
 	var result *Container
 	err := d.Invoke(func(
-		provider providers.LLMProvider,
+		provider schema.LLMProvider,
 		msgBus *bus.MessageBus,
 		loop *agent.AgentLoop,
 		cronSvc *cron.JobManager,
@@ -93,7 +94,7 @@ func New(cfg *config.Config) (*Container, error) {
 	return result, err
 }
 
-func newProvider(cfg *config.Config) (providers.LLMProvider, error) {
+func newProvider(cfg *config.Config) (schema.LLMProvider, error) {
 	model := cfg.Agents.Defaults.Model
 	result := cfg.MatchProvider(model)
 
@@ -140,7 +141,7 @@ func newCronService(cfg *config.Config) *cron.JobManager {
 	return cron.NewService(cronPath)
 }
 
-func resolveLLMModel(cfg *config.Config, p providers.LLMProvider) llmModelKey {
+func resolveLLMModel(cfg *config.Config, p schema.LLMProvider) llmModelKey {
 	m := cfg.Agents.Defaults.Model
 	if m == "" {
 		m = p.DefaultModel()
@@ -168,7 +169,7 @@ func newSubAgentToolRegistry(cfg *config.Config) subagentRegistry {
 	return subagentRegistry{registry}
 }
 
-func newSubagentManager(p providers.LLMProvider, b *bus.MessageBus, cfg *config.Config, m llmModelKey, reg subagentRegistry) *agent.SubagentManager {
+func newSubagentManager(p schema.LLMProvider, b *bus.MessageBus, cfg *config.Config, m llmModelKey, reg subagentRegistry) *agent.SubagentManager {
 	return agent.NewSubagentManager(
 		p, cfg.WorkspacePath(), b,
 		string(m),
@@ -208,7 +209,7 @@ func newAgentToolRegistry(
 
 func newAgentLoop(
 	b *bus.MessageBus,
-	p providers.LLMProvider,
+	p schema.LLMProvider,
 	cfg *config.Config,
 	sessions *session.Manager,
 	subMgr *agent.SubagentManager,

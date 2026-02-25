@@ -22,7 +22,7 @@ import (
 
 	robfigcron "github.com/robfig/cron/v3"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/tools"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
 type CronSchedule struct {
@@ -189,15 +189,15 @@ func (s *JobManager) AddJob(
 
 // ListJobs returns summaries of all enabled jobs.
 // Implements tools.CronServicer.ListJobs.
-func (s *JobManager) ListJobs() []tools.CronJobSummary {
+func (s *JobManager) ListJobs() []schema.CronJobSummary {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var out []tools.CronJobSummary
+	var out []schema.CronJobSummary
 	for _, j := range s.store.Jobs {
 		if !j.Enabled {
 			continue
 		}
-		out = append(out, tools.CronJobSummary{ID: j.ID, Name: j.Name, Kind: j.Schedule.Kind})
+		out = append(out, schema.CronJobSummary{ID: j.ID, Name: j.Name, Kind: j.Schedule.Kind})
 	}
 	return out
 }

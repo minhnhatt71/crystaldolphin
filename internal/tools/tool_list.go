@@ -1,15 +1,19 @@
 package tools
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
+)
 
 // ToolList holds a named set of tools and exposes them for LLM calls and
 // runtime extension (e.g. MCP servers).
 type ToolList struct {
-	tools map[string]Tool
+	tools map[string]schema.Tool
 }
 
-func NewToolList(ts []Tool) ToolList {
-	list := ToolList{tools: make(map[string]Tool, len(ts))}
+func NewToolList(ts []schema.Tool) ToolList {
+	list := ToolList{tools: make(map[string]schema.Tool, len(ts))}
 	for _, t := range ts {
 		list.tools[t.Name()] = t
 	}
@@ -19,18 +23,18 @@ func NewToolList(ts []Tool) ToolList {
 // NewToolListFromRegistry builds a fresh ToolList from all tools in a Registry.
 // Each call allocates a new map, so the result is isolated from the source.
 func NewToolListFromRegistry(r *Registry) ToolList {
-	list := ToolList{tools: make(map[string]Tool, len(r.tools))}
+	list := ToolList{tools: make(map[string]schema.Tool, len(r.tools))}
 	for k, t := range r.tools {
 		list.tools[k] = t
 	}
 	return list
 }
 
-func (r *ToolList) Get(name string) Tool {
+func (r *ToolList) Get(name string) schema.Tool {
 	return r.tools[name]
 }
 
-func (r *ToolList) Add(t Tool) Tool {
+func (r *ToolList) Add(t schema.Tool) schema.Tool {
 	r.tools[t.Name()] = t
 
 	return t

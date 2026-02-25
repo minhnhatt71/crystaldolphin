@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/providers"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
 )
 
@@ -18,7 +18,7 @@ import (
 // Each subagent has its own isolated tool registry (no message/spawn tools).
 // Mirrors nanobot's Python SubagentManager.
 type SubagentManager struct {
-	provider    providers.LLMProvider
+	provider    schema.LLMProvider
 	workspace   string
 	bus         *bus.MessageBus
 	model       string
@@ -34,7 +34,7 @@ type SubagentManager struct {
 // reg must be the subagent-scoped registry (no spawn/message tools).
 // A fresh ToolList is built from it on every execution, so runs are isolated.
 func NewSubagentManager(
-	provider providers.LLMProvider,
+	provider schema.LLMProvider,
 	workspace string,
 	msgBus *bus.MessageBus,
 	model string,
@@ -118,14 +118,14 @@ func (sm *SubagentManager) runSubagent(
 func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
 	toolList := tools.NewToolListFromRegistry(sm.reg)
 
-	messages := NewMessages(
-		NewSystemMessage(sm.buildSystemPrompt(task)),
-		NewUserMessage(task),
+	messages := schema.NewMessages(
+		schema.NewSystemMessage(sm.buildSystemPrompt(task)),
+		schema.NewUserMessage(task),
 	)
 
 	const maxIter = 15
 	for i := 0; i < maxIter; i++ {
-		resp, err := sm.provider.Chat(ctx, messages, toolList.Definitions(), providers.ChatOptions{
+		resp, err := sm.provider.Chat(ctx, messages, toolList.Definitions(), schema.ChatOptions{
 			Model:       sm.model,
 			MaxTokens:   sm.maxTokens,
 			Temperature: sm.temperature,
@@ -147,9 +147,9 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 		}
 
 		// Append assistant turn with tool calls.
-		var toolCalls []ToolCallDict
+		var toolCalls []schema.ToolCall
 		for _, tc := range resp.ToolCalls {
-			toolCalls = append(toolCalls, ToolCallDict{
+			toolCalls = append(toolCalls, schema.ToolCall{
 				ID:        tc.ID,
 				Name:      tc.Name,
 				Arguments: tc.Arguments,

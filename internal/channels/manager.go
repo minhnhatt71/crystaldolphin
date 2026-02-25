@@ -6,18 +6,19 @@ import (
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
 // Manager owns all enabled channels and routes outbound messages.
 type Manager struct {
-	channels map[string]Channel
+	channels map[string]schema.Channel
 	b        *bus.MessageBus
 }
 
 // NewManager creates a Manager and initialises all enabled channels.
 func NewManager(cfg *config.Config, b *bus.MessageBus) *Manager {
 	m := &Manager{
-		channels: make(map[string]Channel),
+		channels: make(map[string]schema.Channel),
 		b:        b,
 	}
 
@@ -87,7 +88,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 
 	// Start each channel in its own goroutine.
 	for name, ch := range m.channels {
-		go func(n string, c Channel) {
+		go func(n string, c schema.Channel) {
 			slog.Info("starting channel", "name", n)
 			if err := c.Start(ctx); err != nil && ctx.Err() == nil {
 				slog.Error("channel exited with error", "name", n, "err", err)

@@ -12,7 +12,7 @@ import (
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
-	"github.com/crystaldolphin/crystaldolphin/internal/providers"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
 )
@@ -26,7 +26,7 @@ var reThink = regexp.MustCompile(`(?s)<think>.*?</think>`)
 // goroutine.
 type AgentLoop struct {
 	bus      *bus.MessageBus
-	provider providers.LLMProvider
+	provider schema.LLMProvider
 	cfg      *config.Config
 
 	model            string
@@ -56,7 +56,7 @@ type AgentLoop struct {
 // subagent manager. builtinSkillsDir may be "" if there are no embedded skills.
 func NewAgentLoop(
 	b *bus.MessageBus,
-	provider providers.LLMProvider,
+	provider schema.LLMProvider,
 	cfg *config.Config,
 	sessions *session.Manager,
 	registry *tools.Registry,
@@ -69,7 +69,7 @@ func NewAgentLoop(
 		model = provider.DefaultModel()
 	}
 
-	availableTools := tools.NewToolList([]tools.Tool{
+	availableTools := tools.NewToolList([]schema.Tool{
 		registry.Get(tools.ToolReadFile),
 		registry.Get(tools.ToolWriteFile),
 		registry.Get(tools.ToolEditFile),
@@ -330,9 +330,9 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	}
 }
 
-func (al *AgentLoop) runLoop(ctx context.Context, messages Messages, onProgress func(string)) (finalContent string, toolsUsed []string) {
+func (al *AgentLoop) runLoop(ctx context.Context, messages schema.Messages, onProgress func(string)) (finalContent string, toolsUsed []string) {
 	for i := 0; i < al.maxIter; i++ {
-		resp, err := al.provider.Chat(ctx, messages, al.tools.Definitions(), providers.ChatOptions{
+		resp, err := al.provider.Chat(ctx, messages, al.tools.Definitions(), schema.ChatOptions{
 			Model:       al.model,
 			MaxTokens:   al.maxTokens,
 			Temperature: al.temperature,
@@ -363,9 +363,9 @@ func (al *AgentLoop) runLoop(ctx context.Context, messages Messages, onProgress 
 		}
 
 		// Append assistant turn with tool calls.
-		var toolCalls []ToolCallDict
+		var toolCalls []schema.ToolCall
 		for _, tc := range resp.ToolCalls {
-			toolCalls = append(toolCalls, ToolCallDict{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments})
+			toolCalls = append(toolCalls, schema.ToolCall{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments})
 		}
 		messages.AddAssistant(resp.Content, toolCalls, resp.ReasoningContent)
 
@@ -437,7 +437,7 @@ func stripThink(s string) string {
 }
 
 // toolHint formats tool calls as a concise hint string, e.g. web_search("query").
-func toolHint(tcs []providers.ToolCallRequest) string {
+func toolHint(tcs []schema.ToolCallRequest) string {
 	parts := make([]string, 0, len(tcs))
 	for _, tc := range tcs {
 		var firstVal string

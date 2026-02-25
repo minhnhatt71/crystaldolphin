@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
 // ContextBuilder assembles system prompts and message lists for the LLM.
@@ -137,17 +139,18 @@ func (cb *ContextBuilder) loadMarkdownFiles() string {
 // BuildMessages builds the complete message list for an LLM call.
 // Mirrors Python ContextBuilder.build_messages().
 func (cb *ContextBuilder) BuildMessages(
-	history Messages,
+	history schema.Messages,
 	currentMessage string,
 	media []string,
-	channel, chatID string,
-) Messages {
+	channel,
+	chatID string,
+) schema.Messages {
 	systemPrompt := cb.BuildSystemPrompt()
 	if channel != "" && chatID != "" {
 		systemPrompt += fmt.Sprintf("\n\n## Current Session\nChannel: %s\nChat ID: %s", channel, chatID)
 	}
 
-	messages := NewMessages(NewSystemMessage(systemPrompt))
+	messages := schema.NewMessages(schema.NewSystemMessage(systemPrompt))
 	messages.Append(history)
 	messages.AddUser(cb.buildUserContent(currentMessage, media))
 

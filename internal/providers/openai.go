@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
 
@@ -72,13 +74,13 @@ func NewOpenAIProvider(
 
 func (p *OpenAIProvider) DefaultModel() string { return p.defaultModel }
 
-// Chat implements LLMProvider. It dispatches to Anthropic or OpenAI-compat paths.
+// Chat implements schema.LLMProvider. It dispatches to Anthropic or OpenAI-compat paths.
 func (p *OpenAIProvider) Chat(
 	ctx context.Context,
-	messages MessageHistory,
+	messages schema.Messages,
 	tools []map[string]any,
-	opts ChatOptions,
-) (LLMResponse, error) {
+	opts schema.ChatOptions,
+) (schema.LLMResponse, error) {
 	model := opts.Model
 	if model == "" {
 		model = p.defaultModel
@@ -108,12 +110,12 @@ func (p *OpenAIProvider) Chat(
 
 func (p *OpenAIProvider) chatOpenAI(
 	ctx context.Context,
-	messages MessageHistory,
+	messages schema.Messages,
 	tools []map[string]any,
 	model string,
 	maxTokens int,
 	temperature float64,
-) (LLMResponse, error) {
+) (schema.LLMResponse, error) {
 	body := map[string]any{
 		"model":       model,
 		"messages":    sanitizeMessages(messages),
@@ -128,13 +130,13 @@ func (p *OpenAIProvider) chatOpenAI(
 
 	data, err := json.Marshal(body)
 	if err != nil {
-		return LLMResponse{}, fmt.Errorf("marshal request: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("marshal request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		p.apiBase+"/chat/completions", bytes.NewReader(data))
 	if err != nil {
-		return LLMResponse{}, fmt.Errorf("build request: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+p.apiKey)
@@ -144,13 +146,13 @@ func (p *OpenAIProvider) chatOpenAI(
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return LLMResponse{}, fmt.Errorf("HTTP request: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return LLMResponse{}, fmt.Errorf("read response: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("read response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return errResponse(fmt.Sprintf("HTTP %d: %s", resp.StatusCode, friendlyHTTPError(resp.StatusCode, raw)))
@@ -165,12 +167,12 @@ func (p *OpenAIProvider) chatOpenAI(
 
 func (p *OpenAIProvider) chatAnthropic(
 	ctx context.Context,
-	messages MessageHistory,
+	messages schema.Messages,
 	tools []map[string]any,
 	model string,
 	maxTokens int,
 	temperature float64,
-) (LLMResponse, error) {
+) (schema.LLMResponse, error) {
 	system, converted := convertMessagesToAnthropic(messages)
 
 	body := map[string]any{
@@ -188,13 +190,13 @@ func (p *OpenAIProvider) chatAnthropic(
 
 	data, err := json.Marshal(body)
 	if err != nil {
-		return LLMResponse{}, fmt.Errorf("marshal anthropic request: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("marshal anthropic request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		p.apiBase+"/messages", bytes.NewReader(data))
 	if err != nil {
-		return LLMResponse{}, fmt.Errorf("build anthropic request: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("build anthropic request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", p.apiKey)
@@ -205,13 +207,13 @@ func (p *OpenAIProvider) chatAnthropic(
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
-		return LLMResponse{}, fmt.Errorf("anthropic HTTP request: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("anthropic HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return LLMResponse{}, fmt.Errorf("read anthropic response: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("read anthropic response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return errResponse(fmt.Sprintf("HTTP %d: %s", resp.StatusCode, friendlyHTTPError(resp.StatusCode, raw)))
@@ -291,9 +293,9 @@ func (p *OpenAIProvider) supportsPromptCaching(model string) bool {
 
 // applyCacheControl injects cache_control ephemeral blocks on the last system
 // message content block and the last tool definition.
-func applyCacheControl(messages MessageHistory, tools []map[string]any) (MessageHistory, []map[string]any) {
-	out := NewMessageHistory()
-	out.Messages = make([]Message, len(messages.Messages))
+func applyCacheControl(messages schema.Messages, tools []map[string]any) (schema.Messages, []map[string]any) {
+	out := schema.NewMessages()
+	out.Messages = make([]schema.Message, len(messages.Messages))
 	for i, msg := range messages.Messages {
 		if msg.Role == "system" {
 			newMsg := msg
@@ -336,7 +338,7 @@ func applyCacheControl(messages MessageHistory, tools []map[string]any) (Message
 // ---------------------------------------------------------------------------
 
 // messageToWireMap converts a typed Message to the OpenAI wire-format map.
-func messageToWireMap(m Message) map[string]any {
+func messageToWireMap(m schema.Message) map[string]any {
 	wire := map[string]any{
 		"role":    m.Role,
 		"content": m.Content,
@@ -364,7 +366,7 @@ func messageToWireMap(m Message) map[string]any {
 	return wire
 }
 
-func sanitizeMessages(messages MessageHistory) []map[string]any {
+func sanitizeMessages(messages schema.Messages) []map[string]any {
 	out := make([]map[string]any, 0, len(messages.Messages))
 	for _, m := range messages.Messages {
 		out = append(out, messageToWireMap(m))
@@ -403,7 +405,7 @@ func (p *OpenAIProvider) applyModelOverrides(model string, body map[string]any) 
 
 // convertMessagesToAnthropic converts typed messages to Anthropic's wire format.
 // Returns (system_prompt, converted_messages).
-func convertMessagesToAnthropic(messages MessageHistory) (string, []map[string]any) {
+func convertMessagesToAnthropic(messages schema.Messages) (string, []map[string]any) {
 	var system string
 	var out []map[string]any
 
@@ -526,13 +528,13 @@ type openAIRespBody struct {
 	} `json:"usage"`
 }
 
-func parseOpenAIResponse(raw []byte) (LLMResponse, error) {
+func parseOpenAIResponse(raw []byte) (schema.LLMResponse, error) {
 	var body openAIRespBody
 	if err := json.Unmarshal(raw, &body); err != nil {
-		return LLMResponse{}, fmt.Errorf("parse OpenAI response: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("parse OpenAI response: %w", err)
 	}
 	if len(body.Choices) == 0 {
-		return LLMResponse{}, fmt.Errorf("empty choices in response")
+		return schema.LLMResponse{}, fmt.Errorf("empty choices in response")
 	}
 
 	msg := body.Choices[0].Message
@@ -553,14 +555,14 @@ func parseOpenAIResponse(raw []byte) (LLMResponse, error) {
 		}
 	}
 
-	var toolCalls []ToolCallRequest
+	var toolCalls []schema.ToolCallRequest
 	for _, tc := range msg.ToolCalls {
 		args, err := repairJSON(tc.Function.Arguments)
 		if err != nil {
 			slog.Warn("failed to parse tool arguments", "tool", tc.Function.Name, "err", err)
 			args = map[string]any{}
 		}
-		toolCalls = append(toolCalls, ToolCallRequest{
+		toolCalls = append(toolCalls, schema.ToolCallRequest{
 			ID:        tc.ID,
 			Name:      tc.Function.Name,
 			Arguments: args,
@@ -578,7 +580,7 @@ func parseOpenAIResponse(raw []byte) (LLMResponse, error) {
 		finish = "stop"
 	}
 
-	return LLMResponse{
+	return schema.LLMResponse{
 		Content:          content,
 		ToolCalls:        toolCalls,
 		FinishReason:     finish,
@@ -603,21 +605,21 @@ type anthropicRespBody struct {
 	} `json:"usage"`
 }
 
-func parseAnthropicResponse(raw []byte) (LLMResponse, error) {
+func parseAnthropicResponse(raw []byte) (schema.LLMResponse, error) {
 	var body anthropicRespBody
 	if err := json.Unmarshal(raw, &body); err != nil {
-		return LLMResponse{}, fmt.Errorf("parse Anthropic response: %w", err)
+		return schema.LLMResponse{}, fmt.Errorf("parse Anthropic response: %w", err)
 	}
 
 	var contentStr string
-	var toolCalls []ToolCallRequest
+	var toolCalls []schema.ToolCallRequest
 
 	for _, block := range body.Content {
 		switch block.Type {
 		case "text":
 			contentStr += block.Text
 		case "tool_use":
-			toolCalls = append(toolCalls, ToolCallRequest{
+			toolCalls = append(toolCalls, schema.ToolCallRequest{
 				ID:        block.ID,
 				Name:      block.Name,
 				Arguments: block.Input,
@@ -643,7 +645,7 @@ func parseAnthropicResponse(raw []byte) (LLMResponse, error) {
 		"total_tokens":      body.Usage.InputTokens + body.Usage.OutputTokens,
 	}
 
-	return LLMResponse{
+	return schema.LLMResponse{
 		Content:      content,
 		ToolCalls:    toolCalls,
 		FinishReason: finish,
@@ -691,9 +693,9 @@ func repairJSON(raw string) (map[string]any, error) {
 // Utilities
 // ---------------------------------------------------------------------------
 
-func errResponse(msg string) (LLMResponse, error) {
+func errResponse(msg string) (schema.LLMResponse, error) {
 	s := msg
-	return LLMResponse{Content: &s, FinishReason: "error"}, nil
+	return schema.LLMResponse{Content: &s, FinishReason: "error"}, nil
 }
 
 func friendlyHTTPError(code int, body []byte) string {

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/providers"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
 )
@@ -119,7 +118,7 @@ func (m *MemoryStore) GetMemoryContext() string {
 func (m *MemoryStore) Consolidate(
 	ctx context.Context,
 	s *session.Session,
-	provider providers.LLMProvider,
+	provider schema.LLMProvider,
 	model string,
 	archiveAll bool,
 	memoryWindow int,
@@ -173,7 +172,7 @@ func (m *MemoryStore) Consolidate(
 		}
 		toolsStr := ""
 		if len(msg.ToolsUsed) > 0 {
-			toolsStr = " [tools: " + joinStrings(msg.ToolsUsed, ", ") + "]"
+			toolsStr = " [tools: " + strings.Join(msg.ToolsUsed, ", ") + "]"
 		}
 		lines = append(lines, fmt.Sprintf("[%s] %s%s: %s", ts, upper(msg.Role), toolsStr, content))
 	}
@@ -184,18 +183,18 @@ func (m *MemoryStore) Consolidate(
 			"## Current Long-term Memory\n%s\n\n"+
 			"## Conversation to Process\n%s",
 		orEmpty(currentMemory, "(empty)"),
-		joinStrings(lines, "\n"),
+		strings.Join(lines, "\n"),
 	)
 
-	messages := NewMessages(
-		NewSystemMessage("You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation."),
-		NewUserMessage(prompt),
+	messages := schema.NewMessages(
+		schema.NewSystemMessage("You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation."),
+		schema.NewUserMessage(prompt),
 	)
 
 	resp, err := provider.Chat(ctx,
 		messages,
 		saveMemoryTool,
-		providers.ChatOptions{
+		schema.ChatOptions{
 			Model:       model,
 			MaxTokens:   4096,
 			Temperature: 0.3,
@@ -258,17 +257,6 @@ func orEmpty(s, fallback string) string {
 		return fallback
 	}
 	return s
-}
-
-func joinStrings(ss []string, sep string) string {
-	var b strings.Builder
-	for i, s := range ss {
-		if i > 0 {
-			b.WriteString(sep)
-		}
-		b.WriteString(s)
-	}
-	return b.String()
 }
 
 // stringOrJSON coerces a value from the tool arguments to a string.

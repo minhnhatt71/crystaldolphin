@@ -8,11 +8,6 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
-// Tool is the interface all built-in and MCP-wrapped tools must satisfy.
-// The canonical definition lives in internal/interfaces; this alias keeps
-// existing code compiling without changes.
-type Tool = schema.Tool
-
 // ToolName is the canonical name of a built-in tool.
 type ToolName string
 
@@ -33,13 +28,13 @@ const (
 // Construct one via NewRegistryBuilder().WithTool(...).Build().
 // After construction, MCP tools may be added at runtime via Add().
 type Registry struct {
-	tools map[string]Tool
+	tools map[string]schema.Tool
 }
 
 // Add inserts a tool into an already-built Registry. Intended for runtime
 // extension points such as MCP server connections that are established after
 // initial construction.
-func (r *Registry) Add(tool Tool) {
+func (r *Registry) Add(tool schema.Tool) {
 	r.tools[tool.Name()] = tool
 }
 
@@ -50,7 +45,7 @@ func (r *Registry) Has(name string) bool {
 }
 
 // Get returns the tool with the given name, or nil.
-func (r *Registry) Get(name ToolName) Tool {
+func (r *Registry) Get(name ToolName) schema.Tool {
 	return r.tools[string(name)]
 }
 
