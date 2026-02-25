@@ -449,13 +449,15 @@ func splitCodexToolCallID(id any) (callID, itemID string) {
 
 func codexCacheKey(messages MessageHistory) string {
 	// Simple deterministic hash using the JSON representation.
-	b, _ := json.Marshal(messages.Messages)
+	b, _ := messages.GetHashKey()
+
 	// Use a basic FNV-like approach rather than importing crypto/sha256 just for this.
 	h := uint64(14695981039346656037)
 	for _, c := range b {
 		h ^= uint64(c)
 		h *= 1099511628211
 	}
+
 	return fmt.Sprintf("%016x", h)
 }
 

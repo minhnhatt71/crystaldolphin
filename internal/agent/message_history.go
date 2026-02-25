@@ -2,15 +2,15 @@ package agent
 
 import "github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 
-// MessageHistory is the ordered list of messages exchanged with the LLM.
+// Messages is the ordered list of messages exchanged with the LLM.
 // The canonical definition lives in internal/interfaces; this alias keeps
 // existing code in the agent package compiling without changes.
-type MessageHistory = interfaces.MessageHistory
+type Messages = interfaces.Messages
 
-// NewMessageHistory returns an empty MessageHistory ready for use.
+// NewMessages returns an empty Messages ready for use.
 // The canonical constructor lives in internal/interfaces; this alias keeps
 // existing code in the agent package compiling without changes.
-var NewMessageHistory = interfaces.NewMessageHistory
+var NewMessages = interfaces.NewMessages
 
 // ToolCallDict is a typed representation of a tool-call request.
 // The canonical definition lives in internal/interfaces; this alias keeps

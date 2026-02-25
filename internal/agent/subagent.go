@@ -118,7 +118,7 @@ func (sm *SubagentManager) runSubagent(
 func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
 	toolList := tools.NewToolListFromRegistry(sm.reg)
 
-	messages := NewMessageHistory()
+	messages := NewMessages()
 	messages.AddSystem(sm.buildSystemPrompt(task))
 	messages.AddUser(task)
 

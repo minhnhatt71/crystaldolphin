@@ -50,24 +50,25 @@ type Message struct {
 	Role             string
 	Content          any // string | *string | []ContentBlock
 	ToolCalls        []ToolCall
-	ToolCallID       string  // "tool" role only
-	ToolName         string  // "tool" role only
-	ReasoningContent *string // "assistant" role only
+	ToolCallID       string   // "tool" role only
+	ToolName         string   // "tool" role only
+	ReasoningContent *string  // "assistant" role only
+	ToolsUsed        []string // session-only: names of tools used this turn; not sent to LLM
 }
 
-// MessageHistory is the ordered list of messages exchanged with the LLM.
+// Messages is the ordered list of messages exchanged with the LLM.
 // It owns typed append methods so callers never construct raw maps.
-type MessageHistory struct {
+type Messages struct {
 	Messages []Message
 }
 
-// NewMessageHistory returns an empty MessageHistory ready for use.
-func NewMessageHistory() MessageHistory {
-	return MessageHistory{Messages: make([]Message, 0)}
+// NewMessages returns an empty MessageHistory ready for use.
+func NewMessages() Messages {
+	return Messages{Messages: make([]Message, 0)}
 }
 
 // AddSystem appends a system message.
-func (mh *MessageHistory) AddSystem(content string) {
+func (mh *Messages) AddSystem(content string) {
 	mh.Messages = append(mh.Messages, Message{
 		Role:    "system",
 		Content: content,
@@ -76,7 +77,7 @@ func (mh *MessageHistory) AddSystem(content string) {
 
 // AddUser appends a user message. content may be a plain string or
 // []ContentBlock for multimodal messages.
-func (mh *MessageHistory) AddUser(content any) {
+func (mh *Messages) AddUser(content any) {
 	mh.Messages = append(mh.Messages, Message{
 		Role:    "user",
 		Content: content,
@@ -85,7 +86,7 @@ func (mh *MessageHistory) AddUser(content any) {
 
 // AddAssistant appends an assistant message with optional tool calls and
 // reasoning content.
-func (mh *MessageHistory) AddAssistant(content *string, toolCalls []ToolCall, reasoningContent *string) {
+func (mh *Messages) AddAssistant(content *string, toolCalls []ToolCall, reasoningContent *string) {
 	mh.Messages = append(mh.Messages, Message{
 		Role:             "assistant",
 		Content:          content,
@@ -95,7 +96,7 @@ func (mh *MessageHistory) AddAssistant(content *string, toolCalls []ToolCall, re
 }
 
 // AddToolResult appends a tool-result message.
-func (mh *MessageHistory) AddToolResult(toolCallID, toolName, result string) {
+func (mh *Messages) AddToolResult(toolCallID, toolName, result string) {
 	mh.Messages = append(mh.Messages, Message{
 		Role:       "tool",
 		Content:    result,
@@ -104,7 +105,18 @@ func (mh *MessageHistory) AddToolResult(toolCallID, toolName, result string) {
 	})
 }
 
+func (mh *Messages) GetHashKey() ([]byte, error) {
+	return json.Marshal(mh.Messages)
+}
+
 // Append copies all messages from other into mh.
-func (mh *MessageHistory) Append(other MessageHistory) {
+func (mh *Messages) Append(other Messages) {
 	mh.Messages = append(mh.Messages, other.Messages...)
+}
+
+// Clone returns a deep copy of mh with an independent backing slice.
+func (mh *Messages) Clone() Messages {
+	cloned := make([]Message, len(mh.Messages))
+	copy(cloned, mh.Messages)
+	return Messages{Messages: cloned}
 }

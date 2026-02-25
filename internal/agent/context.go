@@ -137,17 +137,17 @@ func (cb *ContextBuilder) loadBootstrapFiles() string {
 // BuildMessages builds the complete message list for an LLM call.
 // Mirrors Python ContextBuilder.build_messages().
 func (cb *ContextBuilder) BuildMessages(
-	history MessageHistory,
+	history Messages,
 	currentMessage string,
 	media []string,
 	channel, chatID string,
-) MessageHistory {
+) Messages {
 	systemPrompt := cb.BuildSystemPrompt()
 	if channel != "" && chatID != "" {
 		systemPrompt += fmt.Sprintf("\n\n## Current Session\nChannel: %s\nChat ID: %s", channel, chatID)
 	}
 
-	messages := NewMessageHistory()
+	messages := NewMessages()
 	messages.AddSystem(systemPrompt)
 	messages.Append(history)
 	messages.AddUser(cb.buildUserContent(currentMessage, media))

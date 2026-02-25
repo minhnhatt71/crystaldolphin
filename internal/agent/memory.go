@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
 )
@@ -123,12 +125,11 @@ func (m *MemoryStore) Consolidate(
 	memoryWindow int,
 ) error {
 	s.Lock()
-	msgs := make([]map[string]any, len(s.Messages))
-	copy(msgs, s.Messages)
+	msgs := s.Messages.Clone().Messages
 	lastConsolidated := s.LastConsolidated
 	s.Unlock()
 
-	var oldMessages []map[string]any
+	var oldMessages []interfaces.Message
 	var keepCount int
 
 	if archiveAll {
@@ -155,30 +156,26 @@ func (m *MemoryStore) Consolidate(
 	}
 
 	// Format messages for the LLM prompt.
+	ts := time.Now().UTC().Format("2006-01-02T15:04")
 	var lines []string
 	for _, msg := range oldMessages {
-		content, _ := msg["content"].(string)
+		content := ""
+		switch v := msg.Content.(type) {
+		case string:
+			content = v
+		case *string:
+			if v != nil {
+				content = *v
+			}
+		}
 		if content == "" {
 			continue
 		}
-		ts, _ := msg["timestamp"].(string)
-		if len(ts) > 16 {
-			ts = ts[:16]
+		toolsStr := ""
+		if len(msg.ToolsUsed) > 0 {
+			toolsStr = " [tools: " + joinStrings(msg.ToolsUsed, ", ") + "]"
 		}
-		role, _ := msg["role"].(string)
-		tools := ""
-		if tu, ok := msg["tools_used"].([]any); ok && len(tu) > 0 {
-			names := make([]string, 0, len(tu))
-			for _, t := range tu {
-				if s, ok := t.(string); ok {
-					names = append(names, s)
-				}
-			}
-			if len(names) > 0 {
-				tools = " [tools: " + joinStrings(names, ", ") + "]"
-			}
-		}
-		lines = append(lines, fmt.Sprintf("[%s] %s%s: %s", ts, upper(role), tools, content))
+		lines = append(lines, fmt.Sprintf("[%s] %s%s: %s", ts, upper(msg.Role), toolsStr, content))
 	}
 
 	currentMemory := m.ReadLongTerm()
@@ -190,7 +187,7 @@ func (m *MemoryStore) Consolidate(
 		joinStrings(lines, "\n"),
 	)
 
-	messages := NewMessageHistory()
+	messages := NewMessages()
 	messages.AddSystem("You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation.")
 	messages.AddUser(prompt)
 
@@ -232,7 +229,7 @@ func (m *MemoryStore) Consolidate(
 	if archiveAll {
 		s.LastConsolidated = 0
 	} else {
-		s.LastConsolidated = len(s.Messages) - keepCount
+		s.LastConsolidated = len(s.Messages.Messages) - keepCount
 	}
 	s.Unlock()
 

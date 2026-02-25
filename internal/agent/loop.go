@@ -187,15 +187,13 @@ func (al *AgentLoop) processMessage(
 	cmd := strings.TrimSpace(strings.ToLower(msg.Content))
 	switch cmd {
 	case "/new":
-		archived := make([]map[string]any, len(sess.Messages))
-		copy(archived, sess.Messages)
+		archived := sess.Messages
 		sess.Clear()
 		al.sessions.Save(sess)
 		al.sessions.Invalidate(key)
 
 		go func() {
-			tmp := &session.Session{Key: key}
-			tmp.Messages = archived
+			tmp := &session.Session{Key: key, Messages: archived}
 			mem, _ := NewMemoryStore(al.workspace)
 			if mem != nil {
 				_ = mem.Consolidate(ctx, tmp, al.provider, al.model, true, al.memoryWindow)
@@ -217,7 +215,7 @@ func (al *AgentLoop) processMessage(
 	}
 
 	// Trigger background consolidation when history is long.
-	if len(sess.Messages) > al.memoryWindow {
+	if sess.Len() > al.memoryWindow {
 		al.consolidatingMu.Lock()
 		if !al.consolidating[key] {
 			al.consolidating[key] = true
@@ -279,12 +277,8 @@ func (al *AgentLoop) processMessage(
 	slog.Info("Response", "channel", msg.Channel, "sender", msg.SenderID, "length", len(finalContent))
 
 	// Persist to session.
-	sess.AddMessage("user", msg.Content, nil)
-	extras := map[string]any{}
-	if len(toolsUsed) > 0 {
-		extras["tools_used"] = toolsUsed
-	}
-	sess.AddMessage("assistant", finalContent, extras)
+	sess.AddUser(msg.Content)
+	sess.AddAssistant(finalContent, toolsUsed)
 	al.sessions.Save(sess)
 
 	// If the message tool sent something, suppress the return message.
@@ -326,8 +320,8 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 		finalContent = "Background task completed."
 	}
 
-	session.AddMessage("user", fmt.Sprintf("[System: %s] %s", msg.SenderID, msg.Content), nil)
-	session.AddMessage("assistant", finalContent, nil)
+	session.AddUser(fmt.Sprintf("[System: %s] %s", msg.SenderID, msg.Content))
+	session.AddAssistant(finalContent, nil)
 	al.sessions.Save(session)
 
 	return &bus.OutboundMessage{
@@ -337,7 +331,7 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	}
 }
 
-func (al *AgentLoop) runLoop(ctx context.Context, messages MessageHistory, onProgress func(string)) (finalContent string, toolsUsed []string) {
+func (al *AgentLoop) runLoop(ctx context.Context, messages Messages, onProgress func(string)) (finalContent string, toolsUsed []string) {
 	for i := 0; i < al.maxIter; i++ {
 		resp, err := al.provider.Chat(ctx, messages, al.tools.Definitions(), providers.ChatOptions{
 			Model:       al.model,
@@ -381,7 +375,12 @@ func (al *AgentLoop) runLoop(ctx context.Context, messages MessageHistory, onPro
 			toolsUsed = append(toolsUsed, tc.Name)
 			argsJSON, _ := json.Marshal(tc.Arguments)
 			slog.Info("Tool call", "name", tc.Name, "args", truncate(string(argsJSON), 200))
-			result, _ := al.tools.Get(tc.Name).Execute(ctx, tc.Arguments)
+			var result string
+			if t := al.tools.Get(tc.Name); t != nil {
+				result, _ = t.Execute(ctx, tc.Arguments)
+			} else {
+				result = fmt.Sprintf("Error: Tool '%s' not found", tc.Name)
+			}
 			messages.AddToolResult(tc.ID, tc.Name, result)
 		}
 	}

@@ -27,7 +27,7 @@ import (
 // Session holds one conversation's messages and metadata.
 type Session struct {
 	Key              string
-	Messages         []map[string]any
+	Messages         interfaces.Messages
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	Metadata         map[string]any
@@ -36,88 +36,55 @@ type Session struct {
 	mu sync.Mutex
 }
 
-// AddMessage appends a new message to the session.
-// extras are merged into the message object (e.g. tool_calls, tools_used).
-func (s *Session) AddMessage(role, content string, extras map[string]any) {
+// AddUser appends a user message to the session.
+func (s *Session) AddUser(content string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	msg := map[string]any{
-		"role":      role,
-		"content":   content,
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
-	}
-
-	for k, v := range extras {
-		msg[k] = v
-	}
-
-	s.Messages = append(s.Messages, msg)
+	s.Messages.AddUser(content)
 	s.UpdatedAt = time.Now()
 }
 
-// GetHistory returns the last maxMessages messages as typed Messages for the LLM.
-// Session-only fields like timestamp and tools_used are stripped.
-func (s *Session) GetHistory(maxMessages int) interfaces.MessageHistory {
+// AddAssistant appends an assistant message to the session.
+func (s *Session) AddAssistant(content string, toolsUsed []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := content
+	msg := interfaces.Message{
+		Role:      "assistant",
+		Content:   &c,
+		ToolsUsed: toolsUsed,
+	}
+	s.Messages.Messages = append(s.Messages.Messages, msg)
+	s.UpdatedAt = time.Now()
+}
+
+// GetHistory returns the last maxMessages messages for the LLM.
+func (s *Session) GetHistory(maxMessages int) interfaces.Messages {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	msgs := s.Messages
+	msgs := s.Messages.Messages
 	if maxMessages > 0 && len(msgs) > maxMessages {
 		msgs = msgs[len(msgs)-maxMessages:]
 	}
 
-	out := interfaces.NewMessageHistory()
-	for _, m := range msgs {
-		role, _ := m["role"].(string)
-		content := m["content"]
-		if content == nil {
-			content = ""
-		}
-
-		msg := interfaces.Message{
-			Role:    role,
-			Content: content,
-		}
-
-		// Restore tool calls stored in session as []any of wire-format maps.
-		if tcs, ok := m["tool_calls"].([]any); ok {
-			for _, tc := range tcs {
-				tcm, ok := tc.(map[string]any)
-				if !ok {
-					continue
-				}
-				fn, _ := tcm["function"].(map[string]any)
-				id, _ := tcm["id"].(string)
-				name, _ := fn["name"].(string)
-				argsStr, _ := fn["arguments"].(string)
-				var args map[string]any
-				_ = json.Unmarshal([]byte(argsStr), &args)
-				msg.ToolCalls = append(msg.ToolCalls, interfaces.ToolCall{
-					ID:        id,
-					Name:      name,
-					Arguments: args,
-				})
-			}
-		}
-
-		if id, ok := m["tool_call_id"].(string); ok {
-			msg.ToolCallID = id
-		}
-		if name, ok := m["name"].(string); ok {
-			msg.ToolName = name
-		}
-
-		out.Messages = append(out.Messages, msg)
-	}
+	out := interfaces.NewMessages()
+	out.Messages = append(out.Messages, msgs...)
 	return out
+}
+
+// Len returns the number of messages in the session.
+func (s *Session) Len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.Messages.Messages)
 }
 
 // Clear resets messages and the consolidation pointer.
 func (s *Session) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Messages = nil
+	s.Messages = interfaces.NewMessages()
 	s.LastConsolidated = 0
 	s.UpdatedAt = time.Now()
 }
@@ -164,6 +131,7 @@ func (m *Manager) GetOrCreate(key string) *Session {
 	if s == nil {
 		s = &Session{
 			Key:       key,
+			Messages:  interfaces.NewMessages(),
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 			Metadata:  map[string]any{},
@@ -198,12 +166,13 @@ func (m *Manager) Save(s *Session) error {
 	}
 
 	s.mu.Lock()
-	msgs := make([]map[string]any, len(s.Messages))
-	copy(msgs, s.Messages)
+	msgs := make([]interfaces.Message, len(s.Messages.Messages))
+	copy(msgs, s.Messages.Messages)
 	s.mu.Unlock()
 
 	for _, msg := range msgs {
-		if err := enc.Encode(msg); err != nil {
+		wire := messageToWire(msg)
+		if err := enc.Encode(wire); err != nil {
 			return fmt.Errorf("encode message: %w", err)
 		}
 	}
@@ -268,6 +237,109 @@ func (m *Manager) ListSessions() []map[string]any {
 }
 
 // ---------------------------------------------------------------------------
+// Wire format helpers
+
+// wireMessage is the on-disk JSON representation of a message.
+// It mirrors the nanobot Python format exactly.
+type wireMessage struct {
+	Role             string           `json:"role"`
+	Content          any              `json:"content"`
+	ToolCalls        []map[string]any `json:"tool_calls,omitempty"`
+	ToolCallID       string           `json:"tool_call_id,omitempty"`
+	Name             string           `json:"name,omitempty"`
+	ReasoningContent string           `json:"reasoning_content,omitempty"`
+	ToolsUsed        []string         `json:"tools_used,omitempty"`
+	Timestamp        string           `json:"timestamp"`
+}
+
+// messageToWire converts a typed Message to its on-disk map representation.
+func messageToWire(msg interfaces.Message) wireMessage {
+	w := wireMessage{
+		Role:      msg.Role,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		ToolsUsed: msg.ToolsUsed,
+	}
+
+	switch v := msg.Content.(type) {
+	case string:
+		w.Content = v
+	case *string:
+		if v != nil {
+			w.Content = *v
+		}
+	default:
+		w.Content = msg.Content
+	}
+
+	if msg.ReasoningContent != nil {
+		w.ReasoningContent = *msg.ReasoningContent
+	}
+
+	for _, tc := range msg.ToolCalls {
+		w.ToolCalls = append(w.ToolCalls, tc.ToWireMap())
+	}
+
+	w.ToolCallID = msg.ToolCallID
+	w.Name = msg.ToolName
+
+	return w
+}
+
+// wireToMessage converts an on-disk wire map back to a typed Message.
+func wireToMessage(data map[string]any) interfaces.Message {
+	role, _ := data["role"].(string)
+	content := data["content"]
+	if content == nil {
+		content = ""
+	}
+
+	msg := interfaces.Message{
+		Role:    role,
+		Content: content,
+	}
+
+	// Restore tool calls stored in session as []any of wire-format maps.
+	if tcs, ok := data["tool_calls"].([]any); ok {
+		for _, tc := range tcs {
+			tcm, ok := tc.(map[string]any)
+			if !ok {
+				continue
+			}
+			fn, _ := tcm["function"].(map[string]any)
+			id, _ := tcm["id"].(string)
+			name, _ := fn["name"].(string)
+			argsStr, _ := fn["arguments"].(string)
+			var args map[string]any
+			_ = json.Unmarshal([]byte(argsStr), &args)
+			msg.ToolCalls = append(msg.ToolCalls, interfaces.ToolCall{
+				ID:        id,
+				Name:      name,
+				Arguments: args,
+			})
+		}
+	}
+
+	if id, ok := data["tool_call_id"].(string); ok {
+		msg.ToolCallID = id
+	}
+	if name, ok := data["name"].(string); ok {
+		msg.ToolName = name
+	}
+	if rc, ok := data["reasoning_content"].(string); ok && rc != "" {
+		msg.ReasoningContent = &rc
+	}
+	if tu, ok := data["tools_used"].([]any); ok {
+		for _, t := range tu {
+			if s, ok := t.(string); ok {
+				msg.ToolsUsed = append(msg.ToolsUsed, s)
+			}
+		}
+	}
+
+	return msg
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 
 // sessionPath converts a session key to its JSONL file path.
@@ -314,11 +386,12 @@ func (m *Manager) load(key string) *Session {
 	defer f.Close()
 
 	var (
-		messages         []map[string]any
+		messages         interfaces.Messages
 		meta             = map[string]any{}
 		createdAt        time.Time
 		lastConsolidated int
 	)
+	messages = interfaces.NewMessages()
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1<<20), 1<<20) // 1 MB per line
@@ -347,7 +420,7 @@ func (m *Manager) load(key string) *Session {
 				lastConsolidated = int(lc)
 			}
 		} else {
-			messages = append(messages, data)
+			messages.Messages = append(messages.Messages, wireToMessage(data))
 		}
 	}
 
