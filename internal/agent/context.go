@@ -17,7 +17,7 @@ import (
 // Mirrors nanobot's Python ContextBuilder.
 type ContextBuilder struct {
 	workspace string
-	memory    *MemoryStore
+	memory    *FileMemoryStore
 	skills    *SkillsLoader
 }
 
@@ -30,7 +30,7 @@ var bootstrapFiles = []string{"AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "ID
 func NewContextBuilder(workspace, builtinSkillsDir string) *ContextBuilder {
 	mem, _ := NewMemoryStore(workspace)
 	if mem == nil {
-		mem = &MemoryStore{}
+		mem = &FileMemoryStore{}
 	}
 	return &ContextBuilder{
 		workspace: workspace,

@@ -57,7 +57,7 @@ func (mh *Messages) AddToolResult(toolCallID, toolName, result string) {
 	})
 }
 
-func (mh *Messages) GetHashKey() ([]byte, error) {
+func (mh *Messages) HashKey() ([]byte, error) {
 	return json.Marshal(mh.Messages)
 }
 

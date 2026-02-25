@@ -451,7 +451,7 @@ func splitCodexToolCallID(id any) (callID, itemID string) {
 
 func codexCacheKey(messages schema.Messages) string {
 	// Simple deterministic hash using the JSON representation.
-	b, _ := messages.GetHashKey()
+	b, _ := messages.HashKey()
 
 	// Use a basic FNV-like approach rather than importing crypto/sha256 just for this.
 	h := uint64(14695981039346656037)

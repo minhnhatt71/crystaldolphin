@@ -55,7 +55,7 @@ type AgentLoop struct {
 // NewAgentLoop creates an AgentLoop with the supplied tool registry builder and
 // subagent manager. builtinSkillsDir may be "" if there are no embedded skills.
 func NewAgentLoop(
-	b *bus.MessageBus,
+	messageBus *bus.MessageBus,
 	provider schema.LLMProvider,
 	cfg *config.Config,
 	sessions *session.Manager,
@@ -69,21 +69,8 @@ func NewAgentLoop(
 		model = provider.DefaultModel()
 	}
 
-	ts := tools.NewToolList([]schema.Tool{
-		registry.Get(tools.ToolReadFile),
-		registry.Get(tools.ToolWriteFile),
-		registry.Get(tools.ToolEditFile),
-		registry.Get(tools.ToolListDir),
-		registry.Get(tools.ToolExec),
-		registry.Get(tools.ToolWebSearch),
-		registry.Get(tools.ToolWebFetch),
-		registry.Get(tools.ToolMessage),
-		registry.Get(tools.ToolSpawn),
-		registry.Get(tools.ToolCron),
-	})
-
 	return &AgentLoop{
-		bus:              b,
+		bus:              messageBus,
 		provider:         provider,
 		cfg:              cfg,
 		model:            model,
@@ -95,7 +82,7 @@ func NewAgentLoop(
 		builtinSkillsDir: builtinSkillsDir,
 		agentContext:     NewContextBuilder(workspace, builtinSkillsDir),
 		sessions:         sessions,
-		tools:            ts,
+		tools:            registry.GetAll(),
 		subagents:        subagents,
 		consolidating:    make(map[string]bool),
 	}
