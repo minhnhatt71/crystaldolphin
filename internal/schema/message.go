@@ -1,4 +1,4 @@
-package interfaces
+package schema
 
 import "encoding/json"
 
@@ -56,67 +56,34 @@ type Message struct {
 	ToolsUsed        []string // session-only: names of tools used this turn; not sent to LLM
 }
 
-// Messages is the ordered list of messages exchanged with the LLM.
-// It owns typed append methods so callers never construct raw maps.
-type Messages struct {
-	Messages []Message
-}
-
-// NewMessages returns an empty MessageHistory ready for use.
-func NewMessages() Messages {
-	return Messages{Messages: make([]Message, 0)}
-}
-
-// AddSystem appends a system message.
-func (mh *Messages) AddSystem(content string) {
-	mh.Messages = append(mh.Messages, Message{
+func NewSystemMessage(content any) Message {
+	return Message{
 		Role:    "system",
 		Content: content,
-	})
+	}
 }
 
-// AddUser appends a user message. content may be a plain string or
-// []ContentBlock for multimodal messages.
-func (mh *Messages) AddUser(content any) {
-	mh.Messages = append(mh.Messages, Message{
+func NewUserMessage(content any) Message {
+	return Message{
 		Role:    "user",
 		Content: content,
-	})
+	}
 }
 
-// AddAssistant appends an assistant message with optional tool calls and
-// reasoning content.
-func (mh *Messages) AddAssistant(content *string, toolCalls []ToolCall, reasoningContent *string) {
-	mh.Messages = append(mh.Messages, Message{
+func NewAssistantMessage(content *string, toolCalls []ToolCall, reasoningContent *string) Message {
+	return Message{
 		Role:             "assistant",
 		Content:          content,
 		ToolCalls:        toolCalls,
 		ReasoningContent: reasoningContent,
-	})
+	}
 }
 
-// AddToolResult appends a tool-result message.
-func (mh *Messages) AddToolResult(toolCallID, toolName, result string) {
-	mh.Messages = append(mh.Messages, Message{
+func NewToolResultMessage(toolCallID, toolName, result string) Message {
+	return Message{
 		Role:       "tool",
 		Content:    result,
 		ToolCallID: toolCallID,
 		ToolName:   toolName,
-	})
-}
-
-func (mh *Messages) GetHashKey() ([]byte, error) {
-	return json.Marshal(mh.Messages)
-}
-
-// Append copies all messages from other into mh.
-func (mh *Messages) Append(other Messages) {
-	mh.Messages = append(mh.Messages, other.Messages...)
-}
-
-// Clone returns a deep copy of mh with an independent backing slice.
-func (mh *Messages) Clone() Messages {
-	cloned := make([]Message, len(mh.Messages))
-	copy(cloned, mh.Messages)
-	return Messages{Messages: cloned}
+	}
 }

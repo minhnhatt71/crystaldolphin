@@ -6,18 +6,18 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
 // CronJobSummary is a lightweight view of a cron job used by the tool.
 // The canonical definition lives in internal/interfaces; this alias keeps
 // existing code compiling without changes.
-type CronJobSummary = interfaces.CronJobSummary
+type CronJobSummary = schema.CronJobSummary
 
 // Service is the interface the CronTool uses to interact with the cron service.
 // The canonical definition lives in internal/interfaces; this alias keeps
 // existing code compiling without changes.
-type Service = interfaces.CronService
+type Service = schema.CronService
 
 // CronTool allows the agent to schedule reminders and recurring tasks.
 type CronTool struct {

@@ -1,4 +1,4 @@
-package interfaces
+package schema
 
 // CronJobSummary is a lightweight view of a scheduled job used by the cron tool.
 type CronJobSummary struct {
@@ -10,8 +10,11 @@ type CronJobSummary struct {
 // CronService is the interface the cron tool uses to manage scheduled jobs.
 // Implemented by cron.JobManager. Defined here to avoid an import cycle.
 type CronService interface {
-	AddJob(name, message string, kind string, everyMs int64, cronExpr, tz string, atMs int64,
-		deliver bool, channel, to string, deleteAfterRun bool) (id string, err error)
+	AddJob(
+		name, message, kind string,
+		everyMs int64, cronExpr, tz string, atMs int64,
+		deliver bool, channel, to string, deleteAfterRun bool,
+	) (id string, err error)
 	ListJobs() []CronJobSummary
 	RemoveJob(id string) bool
 }

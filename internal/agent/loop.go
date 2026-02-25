@@ -58,6 +58,7 @@ func NewAgentLoop(
 	b *bus.MessageBus,
 	provider providers.LLMProvider,
 	cfg *config.Config,
+	sessions *session.Manager,
 	registry *tools.Registry,
 	subagents *SubagentManager,
 	builtinSkillsDir string,
@@ -68,7 +69,7 @@ func NewAgentLoop(
 		model = provider.DefaultModel()
 	}
 
-	toolList := tools.NewToolList([]tools.Tool{
+	availableTools := tools.NewToolList([]tools.Tool{
 		registry.Get(tools.ToolReadFile),
 		registry.Get(tools.ToolWriteFile),
 		registry.Get(tools.ToolEditFile),
@@ -93,8 +94,8 @@ func NewAgentLoop(
 		workspace:        workspace,
 		builtinSkillsDir: builtinSkillsDir,
 		ctx:              NewContextBuilder(workspace, builtinSkillsDir),
-		sessions:         mustNewSessionManager(workspace),
-		tools:            toolList,
+		sessions:         sessions,
+		tools:            availableTools,
 		subagents:        subagents,
 		consolidating:    make(map[string]bool),
 	}
@@ -140,10 +141,6 @@ func (al *AgentLoop) ProcessDirect(
 	}
 	return resp.Content
 }
-
-// ---------------------------------------------------------------------------
-// Message processing
-// ---------------------------------------------------------------------------
 
 func (al *AgentLoop) handleMessage(ctx context.Context, msg bus.InboundMessage) {
 	al.connectMCPOnce(ctx)
@@ -302,17 +299,19 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 		channel = "cli"
 		chatID = msg.ChatID
 	}
+
 	slog.Info("Processing system message", "sender", msg.SenderID)
 
 	key := channel + ":" + chatID
-	session := al.sessions.GetOrCreate(key)
+	sess := al.sessions.GetOrCreate(key)
 
 	al.setToolContext(channel, chatID, "")
 	conversation := al.ctx.BuildMessages(
-		session.GetHistory(al.memoryWindow),
+		sess.GetHistory(al.memoryWindow),
 		msg.Content,
 		nil,
-		channel, chatID,
+		channel,
+		chatID,
 	)
 
 	finalContent, _ := al.runLoop(ctx, conversation, nil)
@@ -320,9 +319,9 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 		finalContent = "Background task completed."
 	}
 
-	session.AddUser(fmt.Sprintf("[System: %s] %s", msg.SenderID, msg.Content))
-	session.AddAssistant(finalContent, nil)
-	al.sessions.Save(session)
+	sess.AddUser(fmt.Sprintf("[System: %s] %s", msg.SenderID, msg.Content))
+	sess.AddAssistant(finalContent, nil)
+	al.sessions.Save(sess)
 
 	return &bus.OutboundMessage{
 		Channel: channel,
@@ -467,13 +466,3 @@ func truncate(s string, n int) string {
 	return s[:n] + "..."
 }
 
-// mustNewSessionManager creates a session.Manager, panicking on error.
-// Errors here mean the workspace directory is completely inaccessible, which
-// is an unrecoverable condition at startup.
-func mustNewSessionManager(workspace string) *session.Manager {
-	m, err := session.NewManager(workspace)
-	if err != nil {
-		panic(fmt.Sprintf("failed to create session manager: %v", err))
-	}
-	return m
-}

@@ -21,13 +21,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
 // Session holds one conversation's messages and metadata.
 type Session struct {
 	Key              string
-	Messages         interfaces.Messages
+	Messages         schema.Messages
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	Metadata         map[string]any
@@ -49,7 +49,7 @@ func (s *Session) AddAssistant(content string, toolsUsed []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c := content
-	msg := interfaces.Message{
+	msg := schema.Message{
 		Role:      "assistant",
 		Content:   &c,
 		ToolsUsed: toolsUsed,
@@ -59,7 +59,7 @@ func (s *Session) AddAssistant(content string, toolsUsed []string) {
 }
 
 // GetHistory returns the last maxMessages messages for the LLM.
-func (s *Session) GetHistory(maxMessages int) interfaces.Messages {
+func (s *Session) GetHistory(maxMessages int) schema.Messages {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -68,7 +68,7 @@ func (s *Session) GetHistory(maxMessages int) interfaces.Messages {
 		msgs = msgs[len(msgs)-maxMessages:]
 	}
 
-	out := interfaces.NewMessages()
+	out := schema.NewMessages()
 	out.Messages = append(out.Messages, msgs...)
 	return out
 }
@@ -84,7 +84,7 @@ func (s *Session) Len() int {
 func (s *Session) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Messages = interfaces.NewMessages()
+	s.Messages = schema.NewMessages()
 	s.LastConsolidated = 0
 	s.UpdatedAt = time.Now()
 }
@@ -131,7 +131,7 @@ func (m *Manager) GetOrCreate(key string) *Session {
 	if s == nil {
 		s = &Session{
 			Key:       key,
-			Messages:  interfaces.NewMessages(),
+			Messages:  schema.NewMessages(),
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 			Metadata:  map[string]any{},
@@ -166,7 +166,7 @@ func (m *Manager) Save(s *Session) error {
 	}
 
 	s.mu.Lock()
-	msgs := make([]interfaces.Message, len(s.Messages.Messages))
+	msgs := make([]schema.Message, len(s.Messages.Messages))
 	copy(msgs, s.Messages.Messages)
 	s.mu.Unlock()
 
@@ -253,7 +253,7 @@ type wireMessage struct {
 }
 
 // messageToWire converts a typed Message to its on-disk map representation.
-func messageToWire(msg interfaces.Message) wireMessage {
+func messageToWire(msg schema.Message) wireMessage {
 	w := wireMessage{
 		Role:      msg.Role,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -286,14 +286,14 @@ func messageToWire(msg interfaces.Message) wireMessage {
 }
 
 // wireToMessage converts an on-disk wire map back to a typed Message.
-func wireToMessage(data map[string]any) interfaces.Message {
+func wireToMessage(data map[string]any) schema.Message {
 	role, _ := data["role"].(string)
 	content := data["content"]
 	if content == nil {
 		content = ""
 	}
 
-	msg := interfaces.Message{
+	msg := schema.Message{
 		Role:    role,
 		Content: content,
 	}
@@ -311,7 +311,7 @@ func wireToMessage(data map[string]any) interfaces.Message {
 			argsStr, _ := fn["arguments"].(string)
 			var args map[string]any
 			_ = json.Unmarshal([]byte(argsStr), &args)
-			msg.ToolCalls = append(msg.ToolCalls, interfaces.ToolCall{
+			msg.ToolCalls = append(msg.ToolCalls, schema.ToolCall{
 				ID:        id,
 				Name:      name,
 				Arguments: args,
@@ -386,12 +386,13 @@ func (m *Manager) load(key string) *Session {
 	defer f.Close()
 
 	var (
-		messages         interfaces.Messages
+		messages         schema.Messages
 		meta             = map[string]any{}
 		createdAt        time.Time
 		lastConsolidated int
 	)
-	messages = interfaces.NewMessages()
+
+	messages = schema.NewMessages()
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1<<20), 1<<20) // 1 MB per line

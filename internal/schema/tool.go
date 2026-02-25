@@ -1,7 +1,7 @@
 // Package interfaces contains the core contracts shared across crystaldolphin packages.
 // Concrete implementations live in their respective packages; this package is the
 // single canonical source of truth for every interface definition.
-package interfaces
+package schema
 
 import (
 	"context"

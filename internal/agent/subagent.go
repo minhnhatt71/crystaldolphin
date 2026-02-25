@@ -112,15 +112,16 @@ func (sm *SubagentManager) runSubagent(
 	if err != nil {
 		status = "failed"
 	}
-	sm.announceResult(taskID, label, task, finalResult, status, originChannel, originChatID)
+	sm.announceResult(label, task, finalResult, status, originChannel, originChatID)
 }
 
 func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
 	toolList := tools.NewToolListFromRegistry(sm.reg)
 
-	messages := NewMessages()
-	messages.AddSystem(sm.buildSystemPrompt(task))
-	messages.AddUser(task)
+	messages := NewMessages(
+		NewSystemMessage(sm.buildSystemPrompt(task)),
+		NewUserMessage(task),
+	)
 
 	const maxIter = 15
 	for i := 0; i < maxIter; i++ {
@@ -179,7 +180,6 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 func taskID(_ context.Context) string { return "" }
 
 func (sm *SubagentManager) announceResult(
-	taskID,
 	label,
 	task,
 	result,

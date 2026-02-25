@@ -44,7 +44,7 @@ func (cb *ContextBuilder) BuildSystemPrompt() string {
 
 	parts = append(parts, cb.buildIdentity())
 
-	if bootstrap := cb.loadBootstrapFiles(); bootstrap != "" {
+	if bootstrap := cb.loadMarkdownFiles(); bootstrap != "" {
 		parts = append(parts, bootstrap)
 	}
 
@@ -120,8 +120,8 @@ To recall past events, grep %s/memory/HISTORY.md`,
 	)
 }
 
-// loadBootstrapFiles reads all bootstrap markdown files from the workspace.
-func (cb *ContextBuilder) loadBootstrapFiles() string {
+// loadMarkdownFiles reads all bootstrap markdown files from the workspace.
+func (cb *ContextBuilder) loadMarkdownFiles() string {
 	var parts []string
 	for _, name := range bootstrapFiles {
 		p := filepath.Join(cb.workspace, name)
@@ -147,8 +147,7 @@ func (cb *ContextBuilder) BuildMessages(
 		systemPrompt += fmt.Sprintf("\n\n## Current Session\nChannel: %s\nChat ID: %s", channel, chatID)
 	}
 
-	messages := NewMessages()
-	messages.AddSystem(systemPrompt)
+	messages := NewMessages(NewSystemMessage(systemPrompt))
 	messages.Append(history)
 	messages.AddUser(cb.buildUserContent(currentMessage, media))
 

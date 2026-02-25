@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
 )
 
@@ -129,7 +129,7 @@ func (m *MemoryStore) Consolidate(
 	lastConsolidated := s.LastConsolidated
 	s.Unlock()
 
-	var oldMessages []interfaces.Message
+	var oldMessages []schema.Message
 	var keepCount int
 
 	if archiveAll {
@@ -187,9 +187,10 @@ func (m *MemoryStore) Consolidate(
 		joinStrings(lines, "\n"),
 	)
 
-	messages := NewMessages()
-	messages.AddSystem("You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation.")
-	messages.AddUser(prompt)
+	messages := NewMessages(
+		NewSystemMessage("You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation."),
+		NewUserMessage(prompt),
+	)
 
 	resp, err := provider.Chat(ctx,
 		messages,

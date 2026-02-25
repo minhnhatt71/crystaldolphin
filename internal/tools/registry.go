@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
 // Tool is the interface all built-in and MCP-wrapped tools must satisfy.
 // The canonical definition lives in internal/interfaces; this alias keeps
 // existing code compiling without changes.
-type Tool = interfaces.Tool
+type Tool = schema.Tool
 
 // ToolName is the canonical name of a built-in tool.
 type ToolName string

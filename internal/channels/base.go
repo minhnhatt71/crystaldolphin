@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
 // Channel is the interface every platform must implement.
 // The canonical definition lives in internal/interfaces; this alias keeps
 // existing code compiling without changes.
-type Channel = interfaces.Channel
+type Channel = schema.Channel
 
 // Base holds common state and helper methods shared by all channels.
 type Base struct {

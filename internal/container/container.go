@@ -11,6 +11,7 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
+	"github.com/crystaldolphin/crystaldolphin/internal/session"
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
 )
 
@@ -54,6 +55,9 @@ func New(cfg *config.Config) (*Container, error) {
 		return nil, err
 	}
 	if err := d.Provide(newMessageBus); err != nil {
+		return nil, err
+	}
+	if err := d.Provide(newSessionManager); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newCronService); err != nil {
@@ -124,6 +128,10 @@ func isOAuthProvider(name string) bool {
 
 func newMessageBus() *bus.MessageBus {
 	return bus.NewMessageBus(100)
+}
+
+func newSessionManager(cfg *config.Config) (*session.Manager, error) {
+	return session.NewManager(cfg.WorkspacePath())
 }
 
 func newCronService(cfg *config.Config) *cron.JobManager {
@@ -202,8 +210,9 @@ func newAgentLoop(
 	b *bus.MessageBus,
 	p providers.LLMProvider,
 	cfg *config.Config,
+	sessions *session.Manager,
 	subMgr *agent.SubagentManager,
 	reg agentRegistry,
 ) *agent.AgentLoop {
-	return agent.NewAgentLoop(b, p, cfg, reg.Registry, subMgr, "")
+	return agent.NewAgentLoop(b, p, cfg, sessions, reg.Registry, subMgr, "")
 }
