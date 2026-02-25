@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 )
 
 // MCPServerConfig is the configuration for a single MCP server.
@@ -320,7 +319,7 @@ func (c *MCPClient) callHTTP(ctx context.Context, method string, params any) (js
 // ConnectMCPServers connects to all configured MCP servers and registers
 // their tools into the given Registry. Non-fatal: failed servers are logged
 // and skipped. Returns a cleanup function that stops all subprocess servers.
-func ConnectMCPServers(ctx context.Context, servers map[string]MCPServerConfig, availTools interfaces.ToolList) func() {
+func ConnectMCPServers(ctx context.Context, servers map[string]MCPServerConfig, availTools *ToolList) func() {
 	var clients []*MCPClient
 
 	for name, cfg := range servers {

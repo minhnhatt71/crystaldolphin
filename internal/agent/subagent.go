@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
 )
@@ -118,7 +117,7 @@ func (sm *SubagentManager) runSubagent(
 func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
 	reg := sm.reg
 
-	availTools := interfaces.NewToolList([]interfaces.Tool{
+	availTools := tools.NewToolList([]tools.Tool{
 		reg.Get(tools.ToolCron),
 		reg.Get(tools.ToolEditFile),
 		reg.Get(tools.ToolReadFile),
@@ -174,6 +173,7 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 		if resp.Content != nil {
 			contentVal = *resp.Content
 		}
+
 		messages = append(messages, map[string]any{
 			"role":       "assistant",
 			"content":    contentVal,

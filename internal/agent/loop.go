@@ -12,7 +12,6 @@ import (
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
-	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
@@ -40,7 +39,7 @@ type AgentLoop struct {
 
 	ctx      *ContextBuilder
 	sessions *session.Manager
-	tools    interfaces.ToolList
+	tools    tools.ToolList
 
 	subagents *SubagentManager
 
@@ -69,7 +68,7 @@ func NewAgentLoop(
 		model = provider.DefaultModel()
 	}
 
-	tools := interfaces.NewToolList([]interfaces.Tool{
+	toolList := tools.NewToolList([]tools.Tool{
 		reg.Get(tools.ToolReadFile),
 		reg.Get(tools.ToolWriteFile),
 		reg.Get(tools.ToolEditFile),
@@ -95,7 +94,7 @@ func NewAgentLoop(
 		builtinSkillsDir: builtinSkillsDir,
 		ctx:              NewContextBuilder(workspace, builtinSkillsDir),
 		sessions:         mustNewSessionManager(workspace),
-		tools:            tools,
+		tools:            toolList,
 		subagents:        subagents,
 		consolidating:    make(map[string]bool),
 	}
@@ -437,7 +436,7 @@ func (al *AgentLoop) connectMCPOnce(ctx context.Context) {
 				Headers: c.Headers,
 			}
 		}
-		al.mcpCleanup = tools.ConnectMCPServers(ctx, servers, al.tools)
+		al.mcpCleanup = tools.ConnectMCPServers(ctx, servers, &al.tools)
 	})
 }
 

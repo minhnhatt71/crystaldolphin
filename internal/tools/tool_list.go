@@ -2,15 +2,27 @@ package tools
 
 import "encoding/json"
 
-// ToolList is a pre-built slice of tool definitions in OpenAI function-calling
-// format. Build one from a set of tools via NewToolList(), then pass it
-// directly to LLM provider calls.
-type ToolList []map[string]any
+// ToolList holds a named set of tools and exposes them for LLM calls and
+// runtime extension (e.g. MCP servers).
+type ToolList struct {
+	tools map[string]Tool
+}
 
-// NewToolList converts a collection of Tools into a ToolList.
-func NewToolList(tools map[string]Tool) ToolList {
-	list := make(ToolList, 0, len(tools))
-	for _, t := range tools {
+func NewToolList(ts []Tool) ToolList {
+	list := ToolList{tools: make(map[string]Tool, len(ts))}
+	for _, t := range ts {
+		list.tools[t.Name()] = t
+	}
+	return list
+}
+
+func (r *ToolList) Get(name string) Tool { return r.tools[name] }
+func (r *ToolList) Add(t Tool) Tool      { r.tools[t.Name()] = t; return t }
+
+// Definitions returns all tool definitions in OpenAI function-calling format.
+func (r *ToolList) Definitions() []map[string]any {
+	list := make([]map[string]any, 0, len(r.tools))
+	for _, t := range r.tools {
 		var params any
 		if err := json.Unmarshal(t.Parameters(), &params); err != nil {
 			params = map[string]any{"type": "object", "properties": map[string]any{}}
