@@ -12,6 +12,7 @@ import (
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
@@ -39,7 +40,7 @@ type AgentLoop struct {
 
 	ctx      *ContextBuilder
 	sessions *session.Manager
-	reg      *tools.Registry
+	tools    interfaces.ToolList
 
 	subagents *SubagentManager
 
@@ -52,42 +53,34 @@ type AgentLoop struct {
 	mcpOnce    sync.Once
 }
 
-// NewAgentLoop creates an AgentLoop from configuration.
-// builtinSkillsDir may be "" if there are no embedded skills.
-func NewAgentLoop(b *bus.MessageBus, provider providers.LLMProvider, cfg *config.Config, builtinSkillsDir string) *AgentLoop {
+// NewAgentLoop creates an AgentLoop with the supplied tool registry builder and
+// subagent manager. builtinSkillsDir may be "" if there are no embedded skills.
+func NewAgentLoop(
+	b *bus.MessageBus,
+	provider providers.LLMProvider,
+	cfg *config.Config,
+	reg *tools.Registry,
+	subagents *SubagentManager,
+	builtinSkillsDir string,
+) *AgentLoop {
 	workspace := cfg.WorkspacePath()
 	model := cfg.Agents.Defaults.Model
 	if model == "" {
 		model = provider.DefaultModel()
 	}
 
-	reg := tools.NewRegistry()
-	allowedDir := ""
-	if cfg.Tools.RestrictToWorkspace {
-		allowedDir = workspace
-	}
-
-	reg.Register(tools.NewReadFileTool(workspace, allowedDir))
-	reg.Register(tools.NewWriteFileTool(workspace, allowedDir))
-	reg.Register(tools.NewEditFileTool(workspace, allowedDir))
-	reg.Register(tools.NewListDirTool(workspace, allowedDir))
-	reg.Register(tools.NewExecTool(workspace, cfg.Tools.Exec.Timeout, cfg.Tools.RestrictToWorkspace))
-	reg.Register(tools.NewWebSearchTool(cfg.Tools.Web.Search.APIKey, cfg.Tools.Web.Search.MaxResults))
-	reg.Register(tools.NewWebFetchTool(0))
-	reg.Register(tools.NewMessageTool(b))
-
-	// Spawn tool
-	subMgr := NewSubagentManager(
-		provider, workspace, b,
-		model,
-		cfg.Agents.Defaults.Temperature,
-		cfg.Agents.Defaults.MaxTokens,
-		cfg.Tools.Web.Search.APIKey,
-		cfg.Tools.Exec.Timeout,
-		cfg.Tools.RestrictToWorkspace,
-	)
-
-	reg.Register(tools.NewSpawnTool(subMgr))
+	tools := interfaces.NewToolList([]interfaces.Tool{
+		reg.Get(tools.ToolReadFile),
+		reg.Get(tools.ToolWriteFile),
+		reg.Get(tools.ToolEditFile),
+		reg.Get(tools.ToolListDir),
+		reg.Get(tools.ToolExec),
+		reg.Get(tools.ToolWebSearch),
+		reg.Get(tools.ToolWebFetch),
+		reg.Get(tools.ToolMessage),
+		reg.Get(tools.ToolSpawn),
+		reg.Get(tools.ToolCron),
+	})
 
 	return &AgentLoop{
 		bus:              b,
@@ -102,15 +95,10 @@ func NewAgentLoop(b *bus.MessageBus, provider providers.LLMProvider, cfg *config
 		builtinSkillsDir: builtinSkillsDir,
 		ctx:              NewContextBuilder(workspace, builtinSkillsDir),
 		sessions:         mustNewSessionManager(workspace),
-		reg:              reg,
-		subagents:        subMgr,
+		tools:            tools,
+		subagents:        subagents,
 		consolidating:    make(map[string]bool),
 	}
-}
-
-// SetCronTool registers a CronTool that wraps the given CronServicer.
-func (al *AgentLoop) SetCronTool(svc tools.Service) {
-	al.reg.Register(tools.NewCronTool(svc))
 }
 
 // Run reads from the inbound bus and processes each message in a goroutine.
@@ -257,7 +245,7 @@ func (al *AgentLoop) processMessage(
 	al.setToolContext(msg.Channel, msg.ChatID, msgID)
 
 	// Reset message tool send tracking.
-	if t := al.reg.Get("message"); t != nil {
+	if t := al.tools.Get("message"); t != nil {
 		if mt, ok := t.(*tools.MessageTool); ok {
 			mt.StartTurn()
 		}
@@ -301,7 +289,7 @@ func (al *AgentLoop) processMessage(
 	al.sessions.Save(sess)
 
 	// If the message tool sent something, suppress the return message.
-	if t := al.reg.Get("message"); t != nil {
+	if t := al.tools.Get("message"); t != nil {
 		if mt, ok := t.(*tools.MessageTool); ok && mt.WasSentInTurn() {
 			return nil
 		}
@@ -350,17 +338,9 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Core LLM ↔ tool loop
-// ---------------------------------------------------------------------------
-
-func (al *AgentLoop) runLoop(
-	ctx context.Context,
-	messages []map[string]any,
-	onProgress func(string),
-) (finalContent string, toolsUsed []string) {
+func (al *AgentLoop) runLoop(ctx context.Context, messages []map[string]any, onProgress func(string)) (finalContent string, toolsUsed []string) {
 	for i := 0; i < al.maxIter; i++ {
-		resp, err := al.provider.Chat(ctx, messages, al.reg.GetDefinitions(), providers.ChatOptions{
+		resp, err := al.provider.Chat(ctx, messages, al.tools.Definitions(), providers.ChatOptions{
 			Model:       al.model,
 			MaxTokens:   al.maxTokens,
 			Temperature: al.temperature,
@@ -409,7 +389,7 @@ func (al *AgentLoop) runLoop(
 			toolsUsed = append(toolsUsed, tc.Name)
 			argsJSON, _ := json.Marshal(tc.Arguments)
 			slog.Info("Tool call", "name", tc.Name, "args", truncate(string(argsJSON), 200))
-			result := al.reg.Execute(ctx, tc.Name, tc.Arguments)
+			result, _ := al.tools.Get(tc.Name).Execute(ctx, tc.Arguments)
 			messages = al.ctx.AddToolResult(messages, tc.ID, tc.Name, result)
 		}
 	}
@@ -423,17 +403,17 @@ func (al *AgentLoop) runLoop(
 
 // setToolContext injects routing context into stateful tools.
 func (al *AgentLoop) setToolContext(channel, chatID, msgID string) {
-	if t := al.reg.Get("message"); t != nil {
+	if t := al.tools.Get("message"); t != nil {
 		if mt, ok := t.(*tools.MessageTool); ok {
 			mt.SetContext(channel, chatID, msgID)
 		}
 	}
-	if t := al.reg.Get("spawn"); t != nil {
+	if t := al.tools.Get("spawn"); t != nil {
 		if st, ok := t.(*tools.SpawnTool); ok {
 			st.SetContext(channel, chatID)
 		}
 	}
-	if t := al.reg.Get("cron"); t != nil {
+	if t := al.tools.Get("cron"); t != nil {
 		if ct, ok := t.(*tools.CronTool); ok {
 			ct.SetContext(channel, chatID)
 		}
@@ -457,7 +437,7 @@ func (al *AgentLoop) connectMCPOnce(ctx context.Context) {
 				Headers: c.Headers,
 			}
 		}
-		al.mcpCleanup = tools.ConnectMCPServers(ctx, servers, al.reg)
+		al.mcpCleanup = tools.ConnectMCPServers(ctx, servers, al.tools)
 	})
 }
 

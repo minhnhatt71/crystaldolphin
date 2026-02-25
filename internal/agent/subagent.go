@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
 )
@@ -19,15 +20,13 @@ import (
 // Each subagent has its own isolated tool registry (no message/spawn tools).
 // Mirrors nanobot's Python SubagentManager.
 type SubagentManager struct {
-	provider            providers.LLMProvider
-	workspace           string
-	bus                 *bus.MessageBus
-	model               string
-	temperature         float64
-	maxTokens           int
-	braveAPIKey         string
-	execTimeout         int
-	restrictToWorkspace bool
+	provider    providers.LLMProvider
+	workspace   string
+	bus         *bus.MessageBus
+	model       string
+	temperature float64
+	maxTokens   int
+	reg         *tools.Registry
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
@@ -41,21 +40,17 @@ func NewSubagentManager(
 	model string,
 	temperature float64,
 	maxTokens int,
-	braveAPIKey string,
-	execTimeout int,
-	restrictToWorkspace bool,
+	reg *tools.Registry,
 ) *SubagentManager {
 	return &SubagentManager{
-		provider:            provider,
-		workspace:           workspace,
-		bus:                 msgBus,
-		model:               model,
-		temperature:         temperature,
-		maxTokens:           maxTokens,
-		braveAPIKey:         braveAPIKey,
-		execTimeout:         execTimeout,
-		restrictToWorkspace: restrictToWorkspace,
-		running:             make(map[string]context.CancelFunc),
+		provider:    provider,
+		workspace:   workspace,
+		bus:         msgBus,
+		model:       model,
+		temperature: temperature,
+		maxTokens:   maxTokens,
+		reg:         reg,
+		running:     make(map[string]context.CancelFunc),
 	}
 }
 
@@ -121,33 +116,31 @@ func (sm *SubagentManager) runSubagent(
 }
 
 func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
-	// Isolated tool registry — no message, no spawn tools.
-	registry := tools.NewRegistry()
-	allowedDir := ""
-	if sm.restrictToWorkspace {
-		allowedDir = sm.workspace
-	}
-	registry.Register(tools.NewReadFileTool(sm.workspace, allowedDir))
-	registry.Register(tools.NewWriteFileTool(sm.workspace, allowedDir))
-	registry.Register(tools.NewEditFileTool(sm.workspace, allowedDir))
-	registry.Register(tools.NewListDirTool(sm.workspace, allowedDir))
-	registry.Register(tools.NewExecTool(sm.workspace, sm.execTimeout, sm.restrictToWorkspace))
-	registry.Register(tools.NewWebSearchTool(sm.braveAPIKey, 5))
-	registry.Register(tools.NewWebFetchTool(0))
+	reg := sm.reg
 
-	systemPrompt := sm.buildPrompt(task)
+	availTools := interfaces.NewToolList([]interfaces.Tool{
+		reg.Get(tools.ToolCron),
+		reg.Get(tools.ToolEditFile),
+		reg.Get(tools.ToolReadFile),
+		reg.Get(tools.ToolWriteFile),
+		reg.Get(tools.ToolExec),
+		reg.Get(tools.ToolWebSearch),
+		reg.Get(tools.ToolWebFetch),
+	})
+
 	messages := []map[string]any{
-		{"role": "system", "content": systemPrompt},
+		{"role": "system", "content": sm.buildSystemPrompt(task)},
 		{"role": "user", "content": task},
 	}
 
 	const maxIter = 15
 	for i := 0; i < maxIter; i++ {
-		resp, err := sm.provider.Chat(ctx, messages, registry.GetDefinitions(), providers.ChatOptions{
+		resp, err := sm.provider.Chat(ctx, messages, availTools.Definitions(), providers.ChatOptions{
 			Model:       sm.model,
 			MaxTokens:   sm.maxTokens,
 			Temperature: sm.temperature,
 		})
+
 		if err != nil {
 			return "", err
 		}
@@ -176,6 +169,7 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 				},
 			})
 		}
+
 		contentVal := any(nil)
 		if resp.Content != nil {
 			contentVal = *resp.Content
@@ -189,7 +183,7 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 		// Execute each tool.
 		for _, tc := range resp.ToolCalls {
 			slog.Debug("Subagent tool call", "id", taskID(ctx), "tool", tc.Name)
-			result := registry.Execute(ctx, tc.Name, tc.Arguments)
+			result := reg.Execute(ctx, tc.Name, tc.Arguments)
 			messages = append(messages, map[string]any{
 				"role":         "tool",
 				"tool_call_id": tc.ID,
@@ -233,7 +227,7 @@ Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not men
 	}
 }
 
-func (sm *SubagentManager) buildPrompt(task string) string {
+func (sm *SubagentManager) buildSystemPrompt(task string) string {
 	now := time.Now().Format("2006-01-02 15:04 (Monday)")
 	tz, _ := time.Now().Zone()
 	if tz == "" {

@@ -14,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/interfaces"
 )
 
 // MCPServerConfig is the configuration for a single MCP server.
@@ -40,8 +42,8 @@ type MCPToolWrapper struct {
 	parameters  json.RawMessage
 }
 
-func (w *MCPToolWrapper) Name() string              { return w.name }
-func (w *MCPToolWrapper) Description() string       { return w.description }
+func (w *MCPToolWrapper) Name() string                { return w.name }
+func (w *MCPToolWrapper) Description() string         { return w.description }
 func (w *MCPToolWrapper) Parameters() json.RawMessage { return w.parameters }
 
 func (w *MCPToolWrapper) Execute(ctx context.Context, params map[string]any) (string, error) {
@@ -63,9 +65,9 @@ type MCPClient struct {
 	stdin  io.WriteCloser
 	stdout *bufio.Reader
 
-	mu      sync.Mutex
-	nextID  int64
-	ready   atomic.Bool
+	mu     sync.Mutex
+	nextID int64
+	ready  atomic.Bool
 }
 
 func newMCPClient(name string, cfg MCPServerConfig) *MCPClient {
@@ -156,6 +158,7 @@ func (c *MCPClient) CallTool(ctx context.Context, toolName string, args map[stri
 			Text string `json:"text"`
 		} `json:"content"`
 	}
+
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return string(resp), nil
 	}
@@ -166,6 +169,7 @@ func (c *MCPClient) CallTool(ctx context.Context, toolName string, args map[stri
 			parts = append(parts, block.Text)
 		}
 	}
+
 	out := strings.Join(parts, "\n")
 	if out == "" {
 		out = "(no output)"
@@ -316,7 +320,7 @@ func (c *MCPClient) callHTTP(ctx context.Context, method string, params any) (js
 // ConnectMCPServers connects to all configured MCP servers and registers
 // their tools into the given Registry. Non-fatal: failed servers are logged
 // and skipped. Returns a cleanup function that stops all subprocess servers.
-func ConnectMCPServers(ctx context.Context, servers map[string]MCPServerConfig, reg *Registry) func() {
+func ConnectMCPServers(ctx context.Context, servers map[string]MCPServerConfig, availTools interfaces.ToolList) func() {
 	var clients []*MCPClient
 
 	for name, cfg := range servers {
@@ -342,6 +346,7 @@ func ConnectMCPServers(ctx context.Context, servers map[string]MCPServerConfig, 
 			if inputSchema == nil {
 				inputSchema = map[string]any{"type": "object", "properties": map[string]any{}}
 			}
+
 			schemaBytes, _ := json.Marshal(inputSchema)
 
 			wrapper := &MCPToolWrapper{
@@ -351,7 +356,9 @@ func ConnectMCPServers(ctx context.Context, servers map[string]MCPServerConfig, 
 				description: desc,
 				parameters:  json.RawMessage(schemaBytes),
 			}
-			reg.Register(wrapper)
+
+			availTools.Add(wrapper)
+
 			slog.Debug("MCP tool registered", "server", name, "tool", wrapper.name)
 		}
 		slog.Info("MCP server connected", "server", name, "tools", len(tools))
