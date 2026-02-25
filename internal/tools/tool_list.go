@@ -20,10 +20,12 @@ func NewToolList(ts []schema.Tool) ToolList {
 	return list
 }
 
+// Get returns the tool with the given name, or nil if not found.
 func (r *ToolList) Get(name string) schema.Tool {
 	return r.tools[name]
 }
 
+// Add registers a new tool, replacing any existing tool with the same name.
 func (r *ToolList) Add(t schema.Tool) schema.Tool {
 	r.tools[t.Name()] = t
 

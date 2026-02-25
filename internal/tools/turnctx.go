@@ -4,24 +4,22 @@ import "context"
 
 // TurnContext carries per-turn routing metadata through the context tree.
 // It is set by the agent loop once per message and read by stateful tools
-// (message, spawn, cron) inside Execute — eliminating the need for mutable
-// SetContext calls on each tool singleton.
+// (message, spawn, cron) inside Execute
 type TurnContext struct {
 	Channel string
 	ChatID  string
 	MsgID   string
 
-	// MessageSent is flipped to true by MessageTool.Execute when it delivers
-	// a message.  The agent loop reads it after runLoop to decide whether to
-	// suppress the automatic reply.  Using a pointer so the flag is shared
-	// between the context value and the caller that holds the original.
-	MessageSent *bool
+	// MessageSent is closed by MessageTool.Execute when it delivers a message.
+	// The agent loop checks it after runLoop via a non-blocking receive to
+	// decide whether to suppress the automatic reply.
+	MessageSent chan struct{}
 }
 
 type turnKey struct{}
 
-// WithTurnContext returns a child context that carries tc.
-func WithTurnContext(ctx context.Context, tc TurnContext) context.Context {
+// WithTurnCtx returns a child context that carries tc.
+func WithTurnCtx(ctx context.Context, tc TurnContext) context.Context {
 	return context.WithValue(ctx, turnKey{}, tc)
 }
 

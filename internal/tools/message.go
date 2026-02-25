@@ -20,8 +20,10 @@ func NewMessageTool(b *bus.MessageBus) *MessageTool {
 	return &MessageTool{bus: b}
 }
 
-func (t *MessageTool) Name() string        { return "message" }
-func (t *MessageTool) Description() string { return "Send a message to the user. Use this when you want to communicate something." }
+func (t *MessageTool) Name() string { return "message" }
+func (t *MessageTool) Description() string {
+	return "Send a message to the user. Use this when you want to communicate something."
+}
 func (t *MessageTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
@@ -96,7 +98,7 @@ func (t *MessageTool) Execute(ctx context.Context, params map[string]any) (strin
 	}
 
 	if tc.MessageSent != nil {
-		*tc.MessageSent = true
+		close(tc.MessageSent)
 	}
 
 	info := ""

@@ -236,13 +236,14 @@ func (al *AgentLoop) processMessage(
 	if v, ok := msg.Metadata["message_id"].(string); ok {
 		msgID = v
 	}
-	msgSent := false
 
-	ctx = tools.WithTurnContext(ctx, tools.TurnContext{
+	msgSent := make(chan struct{})
+
+	ctx = tools.WithTurnCtx(ctx, tools.TurnContext{
 		Channel:     msg.Channel,
 		ChatID:      msg.ChatID,
 		MsgID:       msgID,
-		MessageSent: &msgSent,
+		MessageSent: msgSent,
 	})
 
 	history := al.agentContext.BuildMessages(
@@ -279,8 +280,10 @@ func (al *AgentLoop) processMessage(
 	al.sessions.Save(sess)
 
 	// If the message tool sent something, suppress the automatic reply.
-	if msgSent {
+	select {
+	case <-msgSent:
 		return nil
+	default:
 	}
 
 	return &bus.OutboundMessage{
@@ -303,7 +306,7 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	key := channel + ":" + chatID
 	sess := al.sessions.GetOrCreate(key)
 
-	ctx = tools.WithTurnContext(ctx, tools.TurnContext{Channel: channel, ChatID: chatID})
+	ctx = tools.WithTurnCtx(ctx, tools.TurnContext{Channel: channel, ChatID: chatID})
 	conversation := al.agentContext.BuildMessages(
 		sess.GetHistory(al.memoryWindow),
 		msg.Content,
@@ -328,9 +331,9 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	}
 }
 
-func (al *AgentLoop) runLoop(ctx context.Context, messages schema.Messages, onProgress func(string)) (finalContent string, toolsUsed []string) {
+func (al *AgentLoop) runLoop(ctx context.Context, conversation schema.Messages, onProgress func(string)) (finalContent string, toolsUsed []string) {
 	for i := 0; i < al.maxIter; i++ {
-		resp, err := al.provider.Chat(ctx, messages, al.tools.Definitions(), schema.ChatOptions{
+		resp, err := al.provider.Chat(ctx, conversation, al.tools.Definitions(), schema.ChatOptions{
 			Model:       al.model,
 			MaxTokens:   al.maxTokens,
 			Temperature: al.temperature,
@@ -365,20 +368,23 @@ func (al *AgentLoop) runLoop(ctx context.Context, messages schema.Messages, onPr
 		for _, tc := range resp.ToolCalls {
 			toolCalls = append(toolCalls, schema.ToolCall{ID: tc.ID, Name: tc.Name, Arguments: tc.Arguments})
 		}
-		messages.AddAssistant(resp.Content, toolCalls, resp.ReasoningContent)
+		conversation.AddAssistant(resp.Content, toolCalls, resp.ReasoningContent)
 
 		// Execute each tool.
 		for _, tc := range resp.ToolCalls {
 			toolsUsed = append(toolsUsed, tc.Name)
 			argsJSON, _ := json.Marshal(tc.Arguments)
+
 			slog.Info("Tool call", "name", tc.Name, "args", truncate(string(argsJSON), 200))
+
 			var result string
 			if t := al.tools.Get(tc.Name); t != nil {
 				result, _ = t.Execute(ctx, tc.Arguments)
 			} else {
 				result = fmt.Sprintf("Error: Tool '%s' not found", tc.Name)
 			}
-			messages.AddToolResult(tc.ID, tc.Name, result)
+
+			conversation.AddToolResult(tc.ID, tc.Name, result)
 		}
 	}
 

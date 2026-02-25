@@ -17,9 +17,6 @@ type ToolCall struct {
 	Arguments map[string]any
 }
 
-// ToolCallDict is an alias for ToolCall kept for backward compatibility.
-type ToolCallDict = ToolCall
-
 // ToWireMap serialises a ToolCall into the OpenAI wire-format map.
 // Used by provider implementations when building the JSON request body.
 func (tc ToolCall) ToWireMap() map[string]any {
