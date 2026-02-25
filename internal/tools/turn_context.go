@@ -18,8 +18,8 @@ type TurnContext struct {
 
 type turnKey struct{}
 
-// WithTurnCtx returns a child context that carries tc.
-func WithTurnCtx(ctx context.Context, tc TurnContext) context.Context {
+// WithTurn returns a child context that carries tc.
+func WithTurn(ctx context.Context, tc TurnContext) context.Context {
 	return context.WithValue(ctx, turnKey{}, tc)
 }
 

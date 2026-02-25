@@ -239,7 +239,7 @@ func (al *AgentLoop) processMessage(
 
 	msgSent := make(chan struct{})
 
-	ctx = tools.WithTurnCtx(ctx, tools.TurnContext{
+	ctx = tools.WithTurn(ctx, tools.TurnContext{
 		Channel:     msg.Channel,
 		ChatID:      msg.ChatID,
 		MsgID:       msgID,
@@ -306,7 +306,7 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	key := channel + ":" + chatID
 	sess := al.sessions.GetOrCreate(key)
 
-	ctx = tools.WithTurnCtx(ctx, tools.TurnContext{Channel: channel, ChatID: chatID})
+	ctx = tools.WithTurn(ctx, tools.TurnContext{Channel: channel, ChatID: chatID})
 	conversation := al.agentContext.BuildMessages(
 		sess.GetHistory(al.memoryWindow),
 		msg.Content,

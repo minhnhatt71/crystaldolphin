@@ -6,8 +6,8 @@ package bus
 // pushes OutboundMessages back for the channel manager to route.
 // Both directions use buffered channels so senders never block on a slow consumer.
 type MessageBus struct {
-	Inbound  chan InboundMessage  // channels → agent
-	Outbound chan OutboundMessage // agent → channels
+	Inbound  chan InboundMessage  // channels -> agent
+	Outbound chan OutboundMessage // agent -> channels
 }
 
 func NewMessageBus(bufSize int) *MessageBus {
@@ -16,7 +16,3 @@ func NewMessageBus(bufSize int) *MessageBus {
 		Outbound: make(chan OutboundMessage, bufSize),
 	}
 }
-
-func (b *MessageBus) InboundSize() int { return len(b.Inbound) }
-
-func (b *MessageBus) OutboundSize() int { return len(b.Outbound) }

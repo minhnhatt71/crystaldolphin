@@ -112,6 +112,7 @@ func (sm *SubagentManager) runSubagent(
 	if err != nil {
 		status = "failed"
 	}
+
 	sm.announceResult(label, task, finalResult, status, originChannel, originChatID)
 }
 
