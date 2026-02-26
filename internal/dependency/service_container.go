@@ -228,8 +228,8 @@ func newMemoryStore(cfg *config.Config) (schema.MemoryStore, error) {
 	return mem, nil
 }
 
-func newConsolidator(mem schema.MemoryStore, saver *session.Manager, p schema.LLMProvider, m LLMModel, reg AgentRegistry) schema.MemoryConsolidator {
-	return agent.NewConsolidator(mem, saver, p, string(m), reg.Registry)
+func newConsolidator(mem schema.MemoryStore, saver *session.Manager, p schema.LLMProvider, m LLMModel, reg AgentRegistry) schema.MemoryCompactor {
+	return agent.NewCompactor(mem, saver, p, string(m), reg.Registry)
 }
 
 func newSkillsLoader(cfg *config.Config) schema.SkillLoader {
@@ -246,7 +246,7 @@ func newAgentLoop(
 	cfg *config.Config,
 	sessions *session.Manager,
 	mem schema.MemoryStore,
-	consolidator schema.MemoryConsolidator,
+	consolidator schema.MemoryCompactor,
 	subMgr *agent.SubagentManager,
 	reg AgentRegistry,
 	cb *agent.AgentContextBuilder,

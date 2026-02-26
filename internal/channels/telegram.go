@@ -169,7 +169,7 @@ func (t *TelegramChannel) Send(_ context.Context, msg bus.OutboundMessage) error
 	if t.bot == nil {
 		return fmt.Errorf("telegram: bot not running")
 	}
-	chatID, err := parseChatID(msg.ChatID())
+	chatID, err := parseChatID(msg.ChatId())
 	if err != nil {
 		return err
 	}

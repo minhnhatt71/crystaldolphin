@@ -9,6 +9,8 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
+type SessionKey string
+
 // SessionImpl holds one conversation's messages and metadata.
 type SessionImpl struct {
 	Key              string
@@ -104,10 +106,10 @@ func (s *SessionImpl) LastConsolidated() int {
 	return s.lastConsolidated
 }
 
-// Consolidate updates the consolidation cursor after a successful run.
+// Compact updates the consolidation cursor after a successful run.
 // archive=true resets lastConsolidated to 0; false compacts to the keepCount tail.
 // Must only be called from the consolidation goroutine (never concurrently).
-func (s *SessionImpl) Consolidate(archive bool, keepCount int) {
+func (s *SessionImpl) Compact(archive bool, keepCount int) {
 	if archive {
 		s.lastConsolidated = 0
 		s.UpdatedAt = time.Now()

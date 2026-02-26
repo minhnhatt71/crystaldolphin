@@ -28,6 +28,7 @@ func NewService(workspace string, onHeartbeat OnHeartbeatFunc, interval time.Dur
 	if interval <= 0 {
 		interval = 30 * time.Minute
 	}
+
 	return &Service{
 		workspace:   workspace,
 		onHeartbeat: onHeartbeat,

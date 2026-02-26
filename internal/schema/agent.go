@@ -2,6 +2,24 @@ package schema
 
 import "context"
 
+type AgentSettings struct {
+	model        string
+	maxIter      int
+	temperature  float64
+	maxTokens    int
+	memoryWindow int
+}
+
+func NewAgentSettings(model string, maxIter int, temperature float64, maxTokens int, memoryWindow int) AgentSettings {
+	return AgentSettings{
+		model:        model,
+		maxIter:      maxIter,
+		temperature:  temperature,
+		maxTokens:    maxTokens,
+		memoryWindow: memoryWindow,
+	}
+}
+
 type AgentLooper interface {
 	// ProcessDirect is for processing messages that bypass the normal bus flow,
 	// e.g. system messages or subagent messages.

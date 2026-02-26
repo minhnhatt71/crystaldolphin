@@ -256,7 +256,7 @@ func (q *QQChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		body["msg_id"] = mid
 	}
 	data, _ := json.Marshal(body)
-	url := fmt.Sprintf("https://api.sgroup.qq.com/v2/users/%s/messages", msg.ChatID())
+	url := fmt.Sprintf("https://api.sgroup.qq.com/v2/users/%s/messages", msg.ChatId())
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
 		return err

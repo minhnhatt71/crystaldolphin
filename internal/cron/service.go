@@ -156,6 +156,7 @@ func (s *JobManager) AddJob(
 		Message: message,
 		Deliver: deliver,
 	}
+
 	if channel != "" {
 		payload.Channel = &channel
 	}

@@ -130,7 +130,7 @@ func (w *WhatsAppChannel) Send(_ context.Context, msg bus.OutboundMessage) error
 	}
 	payload, _ := json.Marshal(map[string]string{
 		"type": "send",
-		"to":   msg.ChatID(),
+		"to":   msg.ChatId(),
 		"text": msg.Content(),
 	})
 	return w.conn.WriteMessage(websocket.TextMessage, payload)

@@ -169,7 +169,7 @@ func (e *EmailChannel) poll(ctx context.Context) error {
 }
 
 func (e *EmailChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
-	to := msg.ChatID()
+	to := msg.ChatId()
 	subject := e.cfg.SubjectPrefix + "Message"
 	if s, ok := msg.Metadata()["subject"].(string); ok && s != "" {
 		subject = e.cfg.SubjectPrefix + s

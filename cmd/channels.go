@@ -165,9 +165,11 @@ func tokenHint(s string) string {
 	if s == "" {
 		return "(not configured)"
 	}
+
 	if len(s) > 10 {
 		return s[:10] + "..."
 	}
+
 	return s
 }
 

@@ -11,10 +11,10 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
 )
 
-// MemoryConsolidator orchestrates memory consolidation. It is responsible for
+// MemoryCompactor orchestrates memory consolidation. It is responsible for
 // selecting messages, calling the LLM, and persisting results via a MemoryStore.
 // Storage I/O is delegated to the injected store; LLM interaction is done here.
-type MemoryConsolidator struct {
+type MemoryCompactor struct {
 	reg         *tools.Registry
 	memoryStore schema.MemoryStore
 	saver       schema.SessionSaver
@@ -22,14 +22,14 @@ type MemoryConsolidator struct {
 	model       string
 }
 
-// NewConsolidator returns a MemoryConsolidator. The save_memory tool is resolved
+// NewCompactor returns a MemoryCompactor. The save_memory tool is resolved
 // from reg; if absent it falls back to constructing one directly from store.
-func NewConsolidator(store schema.MemoryStore, saver schema.SessionSaver, provider schema.LLMProvider, model string, reg *tools.Registry) *MemoryConsolidator {
+func NewCompactor(store schema.MemoryStore, saver schema.SessionSaver, provider schema.LLMProvider, model string, reg *tools.Registry) *MemoryCompactor {
 	registry := tools.NewRegistryBuilder().
 		WithTool(tools.NewSaveMemoryTool(store)).
 		Build()
 
-	return &MemoryConsolidator{
+	return &MemoryCompactor{
 		saver:       saver,
 		provider:    provider,
 		model:       model,
@@ -45,7 +45,7 @@ func NewConsolidator(store schema.MemoryStore, saver schema.SessionSaver, provid
 //
 // archive=true processes every message (used on /new); otherwise only the
 // slice between LastConsolidated and len-keepCount is processed.
-func (c *MemoryConsolidator) Consolidate(ctx context.Context, s schema.Session, archiveAll bool, memoryWindow int) error {
+func (c *MemoryCompactor) Compact(ctx context.Context, s schema.Session, archiveAll bool, memoryWindow int) error {
 	keepCount := memoryWindow / 2
 
 	msgs, ok := s.ConsolidatedMessages(archiveAll, memoryWindow, keepCount)
@@ -57,7 +57,7 @@ func (c *MemoryConsolidator) Consolidate(ctx context.Context, s schema.Session, 
 		return err
 	}
 
-	s.Consolidate(archiveAll, keepCount)
+	s.Compact(archiveAll, keepCount)
 
 	if err := c.saver.SaveConsolidated(s); err != nil {
 		slog.Warn("memory consolidation: failed to persist session pointer", "err", err)
@@ -70,7 +70,7 @@ func (c *MemoryConsolidator) Consolidate(ctx context.Context, s schema.Session, 
 
 // summarizeAndSave sends oldMsgs to the LLM and invokes SaveMemoryTool.Execute
 // with the returned arguments. Returns an error when the LLM call fails.
-func (c *MemoryConsolidator) summarizeAndSave(ctx context.Context, old schema.Messages) error {
+func (c *MemoryCompactor) summarizeAndSave(ctx context.Context, old schema.Messages) error {
 	current := c.memoryStore.ReadLongTerm()
 	if current == "" {
 		current = "(empty)"

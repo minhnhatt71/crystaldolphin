@@ -39,7 +39,11 @@ func init() {
 }
 
 var exitCommands = map[string]bool{
-	"exit": true, "quit": true, "/exit": true, "/quit": true, ":q": true,
+	"exit":  true,
+	"quit":  true,
+	"/exit": true,
+	"/quit": true,
+	":q":    true,
 }
 
 func runAgent(_ *cobra.Command, _ []string) error {
@@ -54,28 +58,32 @@ func runAgent(_ *cobra.Command, _ []string) error {
 	}
 
 	sessionKey := agentSession
-	channel, chatID := parseSessionKey(sessionKey)
+	channel, chatId := parseSessionKey(sessionKey)
+
+	loop := container.AgentLoop()
+	messageBus := container.MessageBus()
 
 	if agentMessage != "" {
-		return runSingleMessage(container.AgentLoop(), sessionKey, channel, chatID)
+		return runSingleMessage(loop, sessionKey, channel, chatId)
 	}
-	return runInteractive(container.AgentLoop(), container.MessageBus(), channel, chatID)
+
+	return runInteractive(loop, messageBus, channel, chatId)
 }
 
 // runSingleMessage sends one message to the agent and prints the response.
-func runSingleMessage(loop schema.AgentLooper, sessionKey, channel, chatID string) error {
+func runSingleMessage(loop schema.AgentLooper, sessionKey, channel, chatId string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	fmt.Fprintf(os.Stderr, "  ↳ thinking...\n")
-	resp := loop.ProcessDirect(ctx, agentMessage, sessionKey, channel, chatID)
-	printResponse(resp)
+	response := loop.ProcessDirect(ctx, agentMessage, sessionKey, channel, chatId)
+	printResponse(response)
 	return nil
 }
 
 // runInteractive starts the REPL loop: reads lines from stdin, sends each to
 // the agent via the bus, and waits for each reply before prompting again.
-func runInteractive(loop schema.AgentLooper, msgBus bus.Bus, channel, chatID string) error {
+func runInteractive(loop schema.AgentLooper, msgBus bus.Bus, channel, ChatId string) error {
 	fmt.Printf("%s Interactive mode (type 'exit' or Ctrl+C to quit)\n\n", logo)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -86,21 +94,26 @@ func runInteractive(loop schema.AgentLooper, msgBus bus.Bus, channel, chatID str
 	go func() { _ = loop.Run(ctx) }()
 
 	scanner := bufio.NewScanner(os.Stdin)
+
 	for {
 		fmt.Print("You: ")
+
 		if !scanner.Scan() {
 			fmt.Println("\nGoodbye!")
 			return nil
 		}
+
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
+
 		if exitCommands[strings.ToLower(line)] {
 			fmt.Println("Goodbye!")
 			return nil
 		}
-		sendAndWait(ctx, msgBus, channel, chatID, line)
+
+		sendAndWait(ctx, msgBus, channel, ChatId, line)
 	}
 }
 
@@ -126,8 +139,8 @@ func listenForSignals(cancel context.CancelFunc) {
 
 // sendAndWait pushes a message onto the inbound bus and blocks until the agent
 // publishes the final reply (or ctx is cancelled).
-func sendAndWait(ctx context.Context, msgBus bus.Bus, channel, chatID, content string) {
-	msgBus.PublishInbound(bus.NewInboundMessage(channel, "user", chatID, content))
+func sendAndWait(ctx context.Context, msgBus bus.Bus, channel, chatId, content string) {
+	msgBus.PublishInbound(bus.NewInboundMessage(channel, bus.SenderUser, chatId, content))
 
 	doneCh := make(chan struct{})
 	go func() {

@@ -14,10 +14,10 @@ type Session interface {
 	// LastConsolidated returns the consolidation pointer.
 	LastConsolidated() int // returns the current LastConsolidated pointer
 
-	// Consolidate updates the consolidation cursor after a successful run.
+	// Compact updates the consolidation cursor after a successful run.
 	// archive=true resets lastConsolidated to 0; false compacts to the keepCount tail.
 	// Must only be called from the consolidation goroutine (never concurrently).
-	Consolidate(archive bool, keepCount int)
+	Compact(archive bool, keepCount int)
 }
 
 // SessionSaver persists a session after consolidation advances its pointer.
@@ -26,7 +26,7 @@ type SessionSaver interface {
 }
 
 // MemoryStore manages long-term memory and history for the agent.
-// It is responsible only for storage I/O; consolidation logic lives in Consolidator.
+// It is responsible only for storage I/O; consolidation logic lives in MemoryCompactor.
 type MemoryStore interface {
 	ReadLongTerm() string
 	WriteLongTerm(content string) error
@@ -34,10 +34,10 @@ type MemoryStore interface {
 	GetMemoryContext() string
 }
 
-// MemoryConsolidator orchestrates memory consolidation: it selects old messages,
+// MemoryCompactor orchestrates memory consolidation: it selects old messages,
 // calls the LLM to summarise them, and persists the result via a MemoryStore.
-type MemoryConsolidator interface {
-	Consolidate(ctx context.Context, s Session, archiveAll bool, memoryWindow int) error
+type MemoryCompactor interface {
+	Compact(ctx context.Context, s Session, archiveAll bool, memoryWindow int) error
 }
 
 // Memory is the result of a consolidation selection: the messages to process.

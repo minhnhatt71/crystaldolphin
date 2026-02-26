@@ -27,6 +27,16 @@ type MCPServerConfig struct {
 	Headers map[string]string
 }
 
+func NewMCPServerConfig(command string, args []string, env map[string]string, url string, headers map[string]string) MCPServerConfig {
+	return MCPServerConfig{
+		Command: command,
+		Args:    args,
+		Env:     env,
+		URL:     url,
+		Headers: headers,
+	}
+}
+
 // ---------------------------------------------------------------------------
 // MCPToolWrapper — wraps one discovered MCP tool as a Tool
 // ---------------------------------------------------------------------------

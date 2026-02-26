@@ -208,7 +208,7 @@ func (d *DingTalkChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 	}
 	body := map[string]any{
 		"robotCode": d.cfg.ClientID,
-		"userIds":   []string{msg.ChatID()},
+		"userIds":   []string{msg.ChatId()},
 		"msgKey":    "sampleText",
 		"msgParam":  `{"content":"` + escapeDingTalk(msg.Content()) + `"}`,
 	}

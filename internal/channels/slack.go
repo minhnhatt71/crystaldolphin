@@ -205,6 +205,6 @@ func (s *SlackChannel) Send(ctx context.Context, msg bus.OutboundMessage) error 
 		options = append(options, slackgo.MsgOptionTS(threadTS))
 	}
 
-	_, _, err := s.webClient.PostMessageContext(ctx, msg.ChatID(), options...)
+	_, _, err := s.webClient.PostMessageContext(ctx, msg.ChatId(), options...)
 	return err
 }

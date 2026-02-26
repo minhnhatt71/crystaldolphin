@@ -56,9 +56,7 @@ func NewSubagentManager(
 
 // Spawn starts a background subagent goroutine and returns immediately.
 // Implements tools.Spawner.
-func (sm *SubagentManager) Spawn(ctx context.Context,
-	task, label, originChannel, originChatID string,
-) (string, error) {
+func (sm *SubagentManager) Spawn(ctx context.Context, task, label, originChannel, originChatID string) (string, error) {
 	taskID := shortID()
 	if label == "" {
 		label = task
@@ -67,7 +65,7 @@ func (sm *SubagentManager) Spawn(ctx context.Context,
 		}
 	}
 
-	subCtx, cancel := context.WithCancel(context.Background()) // detached from caller
+	subctx, cancel := context.WithCancel(context.Background()) // detached from caller
 
 	sm.mu.Lock()
 	sm.running[taskID] = cancel
@@ -80,7 +78,7 @@ func (sm *SubagentManager) Spawn(ctx context.Context,
 			sm.mu.Unlock()
 			cancel()
 		}()
-		sm.runSubagent(subCtx, taskID, task, label, originChannel, originChatID)
+		sm.runSubagent(subctx, taskID, task, label, originChannel, originChatID)
 	}()
 
 	slog.Info("Spawned subagent", "id", taskID, "label", label)

@@ -263,12 +263,12 @@ func (f *FeishuChannel) Send(ctx context.Context, msg bus.OutboundMessage) error
 
 	// Determine receive_id_type based on chat_id prefix.
 	idType := "chat_id"
-	if strings.HasPrefix(msg.ChatID(), "ou_") {
+	if strings.HasPrefix(msg.ChatId(), "ou_") {
 		idType = "open_id"
 	}
 
 	body := map[string]any{
-		"receive_id": msg.ChatID(),
+		"receive_id": msg.ChatId(),
 		"msg_type":   "text",
 		"content":    `{"text":"` + escapeFeishuText(msg.Content()) + `"}`,
 	}

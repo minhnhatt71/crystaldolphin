@@ -169,7 +169,7 @@ func (m *MochatChannel) dispatch(chatID string, msg mochatMsg) {
 func (m *MochatChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 	url := m.cfg.BaseURL + "/api/messages/send"
 	body := map[string]any{
-		"session_id": msg.ChatID(),
+		"session_id": msg.ChatId(),
 		"content":    msg.Content(),
 	}
 	data, _ := json.Marshal(body)

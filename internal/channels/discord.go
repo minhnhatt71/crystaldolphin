@@ -241,7 +241,7 @@ func (d *DiscordChannel) sendTypingLoop(ctx context.Context, channelID string) {
 }
 
 func (d *DiscordChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
-	url := discordAPI + "/channels/" + msg.ChatID() + "/messages"
+	url := discordAPI + "/channels/" + msg.ChatId() + "/messages"
 	chunks := splitMessage(msg.Content(), discordMaxMsgLen)
 	if len(chunks) == 0 {
 		return nil
