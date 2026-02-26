@@ -239,7 +239,7 @@ func consumeCodexSSE(body io.Reader) (string, []schema.ToolCallRequest, string, 
 					combinedID = callID + "|" + itemID
 				}
 				toolCalls = append(toolCalls, schema.ToolCallRequest{
-					ID:        combinedID,
+					Id:        combinedID,
 					Name:      name,
 					Arguments: args,
 				})

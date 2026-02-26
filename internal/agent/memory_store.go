@@ -2,13 +2,9 @@
 package agent
 
 import (
-	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
@@ -21,7 +17,7 @@ type FileMemoryStore struct {
 
 // NewMemoryStore creates a FileMemoryStore rooted at workspace.
 // The memory/ subdirectory is created if it does not exist.
-func NewMemoryStore(workspace string) (*FileMemoryStore, error) {
+func NewMemoryStore(workspace string) (schema.MemoryStore, error) {
 	dir := filepath.Join(workspace, "memory")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create memory dir: %w", err)
@@ -68,152 +64,10 @@ func (m *FileMemoryStore) AppendHistory(entry string) error {
 // GetMemoryContext returns the long-term memory formatted for injection into
 // the system prompt, or "" if MEMORY.md is empty.
 func (m *FileMemoryStore) GetMemoryContext() string {
-	lt := m.ReadLongTerm()
-	if lt == "" {
+	longTerm := m.ReadLongTerm()
+	if longTerm == "" {
 		return ""
 	}
-	return "## Long-term Memory\n" + lt
-}
 
-// Consolidate summarises old session messages into MEMORY.md and HISTORY.md
-// via a single LLM tool call. It is safe to call concurrently for different
-// sessions; the caller must guard against concurrent calls for the same session
-// (see AgentLoop.consolidating sync.Map).
-//
-// archiveAll=true processes every message (used on /new); otherwise only the
-// slice between LastConsolidated and len-keepCount is processed.
-func (m *FileMemoryStore) Consolidate(ctx context.Context,
-	s schema.ConsolidatableSession,
-	saver schema.SessionSaver,
-	provider schema.LLMProvider,
-	model string,
-	archiveAll bool,
-	memoryWindow int,
-) error {
-	s.Lock()
-	x := s.CopyMessages()
-	lastConsolidated := s.LastConsolidated()
-	s.Unlock()
-
-	var oldMessages []schema.Message
-	var keepCount int
-
-	msgs := x.Messages
-
-	if archiveAll {
-		oldMessages = msgs
-		keepCount = 0
-		slog.Info("memory consolidation (archive_all)", "messages", len(msgs))
-	} else {
-		keepCount = memoryWindow / 2
-		if len(msgs) <= keepCount {
-			return nil
-		}
-		if len(msgs)-lastConsolidated <= 0 {
-			return nil
-		}
-		end := len(msgs) - keepCount
-		if end <= lastConsolidated {
-			return nil
-		}
-		oldMessages = msgs[lastConsolidated:end]
-		if len(oldMessages) == 0 {
-			return nil
-		}
-		slog.Info("memory consolidation", "to_consolidate", len(oldMessages), "keep", keepCount)
-	}
-
-	// Format messages for the LLM prompt.
-	ts := time.Now().UTC().Format("2006-01-02T15:04")
-	var lines []string
-	for _, msg := range oldMessages {
-		content := ""
-		switch v := msg.Content.(type) {
-		case string:
-			content = v
-		case *string:
-			if v != nil {
-				content = *v
-			}
-		}
-		if content == "" {
-			continue
-		}
-		toolsStr := ""
-		if len(msg.ToolsUsed) > 0 {
-			toolsStr = " [tools: " + strings.Join(msg.ToolsUsed, ", ") + "]"
-		}
-		lines = append(lines, fmt.Sprintf("[%s] %s%s: %s", ts, upper(string(msg.Role)), toolsStr, content))
-	}
-
-	currentMemory := m.ReadLongTerm()
-	prompt := fmt.Sprintf(
-		"Process this conversation and call the save_memory tool with your consolidation.\n\n"+
-			"## Current Long-term Memory\n%s\n\n"+
-			"## Conversation to Process\n%s",
-		orEmpty(currentMemory, "(empty)"),
-		strings.Join(lines, "\n"),
-	)
-
-	messages := schema.NewMessages(
-		schema.NewSystemMessage(
-			"You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation.",
-		),
-		schema.NewUserMessage(prompt),
-	)
-
-	resp, err := provider.Chat(ctx,
-		messages,
-		saveMemoryTool,
-		schema.ChatOptions{
-			Model:       model,
-			MaxTokens:   4096,
-			Temperature: 0.3,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("consolidation LLM call: %w", err)
-	}
-
-	if !resp.HasToolCalls() {
-		slog.Warn("memory consolidation: LLM did not call save_memory, skipping")
-		return nil
-	}
-
-	args := resp.ToolCalls[0].Arguments
-
-	if entry := stringOrJSON(args["history_entry"]); entry != "" {
-		if err := m.AppendHistory(entry); err != nil {
-			slog.Warn("failed to append history", "err", err)
-		}
-	}
-	if update := stringOrJSON(args["memory_update"]); update != "" {
-		if update != currentMemory {
-			if err := m.WriteLongTerm(update); err != nil {
-				slog.Warn("failed to write long-term memory", "err", err)
-			}
-		}
-	}
-
-	// Advance the consolidation pointer and compact the in-memory slice.
-	// Use len(msgs) from the cloned snapshot taken before the LLM call,
-	// not s.Messages.Messages which may have grown concurrently.
-	if archiveAll {
-		s.Lock()
-		s.SetLastConsolidated(0)
-		s.Unlock()
-	} else {
-		// Compact drops already-consolidated messages and resets lastConsolidated
-		// to 0 (the tail is now the start of the slice).
-		s.Compact(keepCount)
-	}
-
-	// Persist the updated pointer immediately so it survives a restart.
-	if err := saver.SaveConsolidated(s); err != nil {
-		slog.Warn("memory consolidation: failed to persist session pointer", "err", err)
-	}
-
-	slog.Info("memory consolidation done", "messages", len(msgs), "last_consolidated", s.LastConsolidated())
-
-	return nil
+	return "## Long-term Memory\n" + longTerm
 }

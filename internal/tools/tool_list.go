@@ -12,12 +12,13 @@ type ToolList struct {
 	tools map[string]schema.Tool
 }
 
-func NewToolList(ts []schema.Tool) ToolList {
+func NewToolList(ts ...schema.Tool) *ToolList {
 	list := ToolList{tools: make(map[string]schema.Tool, len(ts))}
 	for _, t := range ts {
 		list.tools[t.Name()] = t
 	}
-	return list
+
+	return &list
 }
 
 // Get returns the tool with the given name, or nil if not found.

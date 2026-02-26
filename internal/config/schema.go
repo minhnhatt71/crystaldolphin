@@ -1,7 +1,3 @@
-// Package config defines the configuration schema for crystaldolphin.
-//
-// JSON keys use camelCase to stay byte-compatible with existing
-// ~/.nanobot/config.json files created by the Python nanobot.
 package config
 
 import (

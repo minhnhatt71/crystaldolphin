@@ -91,10 +91,14 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 	})
 
 	// Wire heartbeat → agent callback.
-	hb := heartbeat.NewService(cfg.WorkspacePath(), func(ctx context.Context, content string) error {
-		loop.ProcessDirect(ctx, content, "heartbeat:direct", "heartbeat", "direct")
-		return nil
-	}, 0)
+	hb := heartbeat.NewService(
+		cfg.WorkspacePath(),
+		func(ctx context.Context, content string) error {
+			loop.ProcessDirect(ctx, content, "heartbeat:direct", "heartbeat", "direct")
+			return nil
+		},
+		0,
+	)
 
 	// Graceful shutdown context.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

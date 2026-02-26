@@ -21,8 +21,8 @@ type skillMeta struct {
 	Metadata string `yaml:"metadata"`
 }
 
-// nanobotMeta is the structure inside the JSON "metadata" YAML field.
-type nanobotMeta struct {
+// crystalDolphinMeta is the structure inside the JSON "metadata" YAML field.
+type crystalDolphinMeta struct {
 	Always   bool `json:"always"`
 	Requires struct {
 		Bins []string `json:"bins"`
@@ -31,7 +31,6 @@ type nanobotMeta struct {
 }
 
 // SkillsLoader scans workspace and builtin skills directories and builds
-// context summaries.  Mirrors nanobot's Python SkillsLoader exactly.
 type SkillsLoader struct {
 	workspace       string // workspace root (contains skills/ subdir)
 	workspaceSkills string
@@ -192,12 +191,12 @@ func (sl *SkillsLoader) getSkillFrontmatter(name string) skillMeta {
 	return m
 }
 
-func (sl *SkillsLoader) getCrystalDolphinMeta(name string) nanobotMeta {
+func (sl *SkillsLoader) getCrystalDolphinMeta(name string) crystalDolphinMeta {
 	fm := sl.getSkillFrontmatter(name)
 	if fm.Metadata == "" {
-		return nanobotMeta{}
+		return crystalDolphinMeta{}
 	}
-	var nm nanobotMeta
+	var nm crystalDolphinMeta
 	// Metadata field can be a JSON string.
 	raw := fm.Metadata
 	// Try wrapping with {"nanobot": ...} if it looks like a JSON object.
@@ -225,7 +224,7 @@ func (sl *SkillsLoader) getSkillDescription(name string) string {
 	return name
 }
 
-func (sl *SkillsLoader) checkRequirements(m nanobotMeta) bool {
+func (sl *SkillsLoader) checkRequirements(m crystalDolphinMeta) bool {
 	for _, bin := range m.Requires.Bins {
 		if _, err := exec.LookPath(bin); err != nil {
 			return false
@@ -239,7 +238,7 @@ func (sl *SkillsLoader) checkRequirements(m nanobotMeta) bool {
 	return true
 }
 
-func (sl *SkillsLoader) getMissingRequirements(m nanobotMeta) string {
+func (sl *SkillsLoader) getMissingRequirements(m crystalDolphinMeta) string {
 	var missing []string
 	for _, bin := range m.Requires.Bins {
 		if _, err := exec.LookPath(bin); err != nil {

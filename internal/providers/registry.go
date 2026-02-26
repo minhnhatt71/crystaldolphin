@@ -8,8 +8,6 @@ type ModelOverride struct {
 	Overrides map[string]any // parameters to merge into the request body
 }
 
-// ProviderSpec is the metadata record for one LLM provider.
-// Translated verbatim from nanobot's Python ProviderSpec dataclass.
 type ProviderSpec struct {
 	// Identity
 	Name        string   // config field name, e.g. "dashscope"

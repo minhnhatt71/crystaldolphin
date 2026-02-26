@@ -75,6 +75,9 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	if err := d.Provide(newMemoryStore); err != nil {
 		return nil, err
 	}
+	if err := d.Provide(newConsolidator); err != nil {
+		return nil, err
+	}
 	if err := d.Provide(newSkillsLoader); err != nil {
 		return nil, err
 	}
@@ -192,6 +195,7 @@ func newAgentRegistry(
 	b bus.Bus,
 	subMgr *agent.SubagentManager,
 	cronMgr *cron.JobManager,
+	mem schema.MemoryStore,
 ) AgentRegistry {
 	workspace := cfg.WorkspacePath()
 	allowedDir := ""
@@ -210,6 +214,7 @@ func newAgentRegistry(
 		WithTool(tools.NewMessageTool(b)).
 		WithTool(tools.NewSpawnTool(subMgr)).
 		WithTool(tools.NewCronTool(cronMgr)).
+		WithTool(tools.NewSaveMemoryTool(mem)).
 		Build()
 
 	return AgentRegistry{registry}
@@ -223,11 +228,15 @@ func newMemoryStore(cfg *config.Config) (schema.MemoryStore, error) {
 	return mem, nil
 }
 
+func newConsolidator(mem schema.MemoryStore, saver *session.Manager, p schema.LLMProvider, m LLMModel, reg AgentRegistry) schema.MemoryConsolidator {
+	return agent.NewConsolidator(mem, saver, p, string(m), reg.Registry)
+}
+
 func newSkillsLoader(cfg *config.Config) schema.SkillLoader {
 	return agent.NewSkillsLoader(cfg.WorkspacePath(), "")
 }
 
-func newContextBuilder(cfg *config.Config, mem schema.MemoryStore, sl schema.SkillLoader) *agent.ContextBuilder {
+func newContextBuilder(cfg *config.Config, mem schema.MemoryStore, sl schema.SkillLoader) *agent.AgentContextBuilder {
 	return agent.NewContextBuilder(cfg.WorkspacePath(), mem, sl)
 }
 
@@ -237,9 +246,10 @@ func newAgentLoop(
 	cfg *config.Config,
 	sessions *session.Manager,
 	mem schema.MemoryStore,
+	consolidator schema.MemoryConsolidator,
 	subMgr *agent.SubagentManager,
 	reg AgentRegistry,
-	cb *agent.ContextBuilder,
+	cb *agent.AgentContextBuilder,
 ) schema.AgentLooper {
-	return agent.NewAgentLoop(b, p, cfg, sessions, mem, reg.Registry, subMgr, cb)
+	return agent.NewAgentLoop(b, p, cfg, sessions, consolidator, reg.Registry, subMgr, cb)
 }

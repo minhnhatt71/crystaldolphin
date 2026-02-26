@@ -13,8 +13,8 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
-// ContextBuilder assembles system prompts and message lists for the LLM.
-type ContextBuilder struct {
+// AgentContextBuilder assembles system prompts and message lists for the LLM.
+type AgentContextBuilder struct {
 	workspace string
 	memory    schema.MemoryStore
 	skills    schema.SkillLoader
@@ -25,12 +25,12 @@ var bootstrapFiles = []string{"AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "ID
 
 // NewContextBuilder creates a ContextBuilder for the given workspace.
 // mem and sl are injected by the dependency container.
-func NewContextBuilder(workspace string, memory schema.MemoryStore, skillsLoader schema.SkillLoader) *ContextBuilder {
+func NewContextBuilder(workspace string, memory schema.MemoryStore, skillsLoader schema.SkillLoader) *AgentContextBuilder {
 	if memory == nil {
 		memory = &FileMemoryStore{}
 	}
 
-	return &ContextBuilder{
+	return &AgentContextBuilder{
 		workspace: workspace,
 		memory:    memory,
 		skills:    skillsLoader,
@@ -39,7 +39,7 @@ func NewContextBuilder(workspace string, memory schema.MemoryStore, skillsLoader
 
 // BuildSystemPrompt assembles the full system prompt: identity + bootstrap
 // files + memory + always-skills + skills summary.
-func (cb *ContextBuilder) BuildSystemPrompt() string {
+func (cb *AgentContextBuilder) BuildSystemPrompt() string {
 	var parts []string
 
 	parts = append(parts, cb.buildIdentity())
@@ -73,7 +73,7 @@ Skills with available="false" need dependencies installed first - you can try in
 }
 
 // buildIdentity returns the core identity section of the system prompt.
-func (cb *ContextBuilder) buildIdentity() string {
+func (cb *AgentContextBuilder) buildIdentity() string {
 	now := time.Now().Format("2006-01-02 15:04 (Monday)")
 	tz, _ := time.Now().Zone()
 	if tz == "" {
@@ -121,7 +121,7 @@ To recall past events, grep %s/memory/HISTORY.md`,
 }
 
 // loadMarkdownFiles reads all bootstrap markdown files from the workspace.
-func (cb *ContextBuilder) loadMarkdownFiles() string {
+func (cb *AgentContextBuilder) loadMarkdownFiles() string {
 	var parts []string
 	for _, name := range bootstrapFiles {
 		p := filepath.Join(cb.workspace, name)
@@ -136,7 +136,7 @@ func (cb *ContextBuilder) loadMarkdownFiles() string {
 
 // BuildMessages builds the complete message list for an LLM call.
 // Mirrors Python ContextBuilder.build_messages().
-func (cb *ContextBuilder) BuildMessages(
+func (cb *AgentContextBuilder) BuildMessages(
 	history schema.Messages,
 	currentMessage string,
 	media []string,
@@ -156,7 +156,7 @@ func (cb *ContextBuilder) BuildMessages(
 }
 
 // buildUserContent builds user content, embedding base64 images when media is provided.
-func (cb *ContextBuilder) buildUserContent(text string, media []string) any {
+func (cb *AgentContextBuilder) buildUserContent(text string, media []string) any {
 	if len(media) == 0 {
 		return text
 	}

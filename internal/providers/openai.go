@@ -562,7 +562,7 @@ func parseOpenAIResponse(raw []byte) (schema.LLMResponse, error) {
 			args = map[string]any{}
 		}
 		toolCalls = append(toolCalls, schema.ToolCallRequest{
-			ID:        tc.ID,
+			Id:        tc.ID,
 			Name:      tc.Function.Name,
 			Arguments: args,
 		})
@@ -619,7 +619,7 @@ func parseAnthropicResponse(raw []byte) (schema.LLMResponse, error) {
 			contentStr += block.Text
 		case "tool_use":
 			toolCalls = append(toolCalls, schema.ToolCallRequest{
-				ID:        block.ID,
+				Id:        block.ID,
 				Name:      block.Name,
 				Arguments: block.Input,
 			})

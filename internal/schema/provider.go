@@ -19,7 +19,7 @@ func NewChatOptions(model string, maxTokens int, temperature float64) ChatOption
 
 // ToolCallRequest represents one tool invocation requested by the LLM.
 type ToolCallRequest struct {
-	ID        string
+	Id        string
 	Name      string
 	Arguments map[string]any
 }

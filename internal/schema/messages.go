@@ -14,8 +14,10 @@ func NewMessages(msgs ...Message) Messages {
 	if len(msgs) == 0 {
 		return Messages{Messages: make([]Message, 0)}
 	}
+
 	out := make([]Message, len(msgs))
 	copy(out, msgs)
+
 	return Messages{Messages: out}
 }
 
@@ -27,7 +29,7 @@ func (mh *Messages) Add(msg Message) {
 // AddSystem appends a system message.
 func (mh *Messages) AddSystem(content string) {
 	mh.Messages = append(mh.Messages, Message{
-		Role:    "system",
+		Role:    RoleSystem,
 		Content: content,
 	})
 }
@@ -36,7 +38,7 @@ func (mh *Messages) AddSystem(content string) {
 // []ContentBlock for multimodal messages.
 func (mh *Messages) AddUser(content any) {
 	mh.Messages = append(mh.Messages, Message{
-		Role:    "user",
+		Role:    RoleUser,
 		Content: content,
 	})
 }
@@ -45,7 +47,7 @@ func (mh *Messages) AddUser(content any) {
 // reasoning content.
 func (mh *Messages) AddAssistant(content *string, toolCalls []ToolCall, reasoningContent *string) {
 	mh.Messages = append(mh.Messages, Message{
-		Role:             "assistant",
+		Role:             RoleAssistant,
 		Content:          content,
 		ToolCalls:        toolCalls,
 		ReasoningContent: reasoningContent,
@@ -55,7 +57,7 @@ func (mh *Messages) AddAssistant(content *string, toolCalls []ToolCall, reasonin
 // AddToolResult appends a tool-result message.
 func (mh *Messages) AddToolResult(toolCallID, toolName, result string) {
 	mh.Messages = append(mh.Messages, Message{
-		Role:       "tool",
+		Role:       RoleTool,
 		Content:    result,
 		ToolCallID: toolCallID,
 		ToolName:   toolName,

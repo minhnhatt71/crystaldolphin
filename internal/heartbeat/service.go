@@ -60,10 +60,12 @@ func (s *Service) check(ctx context.Context) {
 		// File not found is normal — no heartbeat configured.
 		return
 	}
+
 	content := string(data)
 	if !hasActiveTasks(content) {
 		return
 	}
+
 	slog.Info("heartbeat: active tasks found, running agent")
 	if s.onHeartbeat != nil {
 		if err := s.onHeartbeat(ctx, content); err != nil {

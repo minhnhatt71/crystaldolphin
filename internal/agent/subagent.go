@@ -56,8 +56,7 @@ func NewSubagentManager(
 
 // Spawn starts a background subagent goroutine and returns immediately.
 // Implements tools.Spawner.
-func (sm *SubagentManager) Spawn(
-	ctx context.Context,
+func (sm *SubagentManager) Spawn(ctx context.Context,
 	task, label, originChannel, originChatID string,
 ) (string, error) {
 	taskID := shortID()
@@ -101,7 +100,7 @@ func (sm *SubagentManager) runSubagent(
 ) {
 	slog.Info("Subagent starting", "id", taskId, "label", label)
 
-	finalResult, err := sm.executeTask(ctx, task)
+	finalResult, err := sm.executeTask(ctx, task, taskId)
 	if err != nil {
 		finalResult = "Error: " + err.Error()
 		slog.Error("Subagent failed", "id", taskId, "err", err)
@@ -117,21 +116,18 @@ func (sm *SubagentManager) runSubagent(
 	sm.announceResult(label, task, finalResult, status, originChannel, originChatId)
 }
 
-func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
+func (sm *SubagentManager) executeTask(ctx context.Context, task, taskId string) (string, error) {
 	tls := sm.reg.GetAll()
 
 	msgs := schema.NewMessages(
-		schema.NewSystemMessage(sm.buildSystemPrompt(task)),
+		schema.NewSystemMessage(sm.buildSystemPrompt()),
 		schema.NewUserMessage(task),
 	)
 
 	const maxIter = 15
 	for i := 0; i < maxIter; i++ {
-		resp, err := sm.provider.Chat(
-			ctx, msgs, tls.Definitions(),
-			schema.NewChatOptions(sm.model, sm.maxTokens, sm.temperature),
-		)
-
+		options := schema.NewChatOptions(sm.model, sm.maxTokens, sm.temperature)
+		resp, err := sm.provider.Chat(ctx, msgs, tls.Definitions(), options)
 		if err != nil {
 			return "", err
 		}
@@ -150,31 +146,27 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 		// Append assistant turn with tool calls.
 		var toolCalls []schema.ToolCall
 		for _, tc := range resp.ToolCalls {
-			toolCalls = append(toolCalls, schema.NewToolCall(tc.ID, tc.Name, tc.Arguments))
+			toolCalls = append(toolCalls, schema.NewToolCall(tc.Id, tc.Name, tc.Arguments))
 		}
 
 		msgs.AddAssistant(resp.Content, toolCalls, nil)
 
 		// Execute each tool.
 		for _, tc := range resp.ToolCalls {
-			slog.Debug("Subagent tool call", "id", taskID(ctx), "tool", tc.Name)
+			slog.Debug("Subagent tool call", "id", taskId, "tool", tc.Name)
 
 			result, err := tls.Get(tc.Name).Execute(ctx, tc.Arguments)
 			if err != nil {
 				result = fmt.Sprintf("Error executing tool %s: %s", tc.Name, err)
-				slog.Error("Subagent tool execution failed", "id", taskID(ctx), "tool", tc.Name, "err", err)
+				slog.Error("Subagent tool execution failed", "id", taskId, "tool", tc.Name, "err", err)
 			}
 
-			msgs.AddToolResult(tc.ID, tc.Name, result)
+			msgs.AddToolResult(tc.Id, tc.Name, result)
 		}
 	}
 
 	return "Task completed (max iterations reached).", nil
 }
-
-// taskID is a helper that extracts the task ID stored in context (if any).
-// Used only for logging; returns "" if not set.
-func taskID(_ context.Context) string { return "" }
 
 func (sm *SubagentManager) announceResult(
 	label,
@@ -197,7 +189,7 @@ Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not men
 	sm.bus.PublishInbound(bus.NewInboundMessage("system", "subagent", originChannel+":"+originChatID, content))
 }
 
-func (sm *SubagentManager) buildSystemPrompt(task string) string {
+func (sm *SubagentManager) buildSystemPrompt() string {
 	now := time.Now().Format("2006-01-02 15:04 (Monday)")
 	tz, _ := time.Now().Zone()
 	if tz == "" {
@@ -209,7 +201,6 @@ func (sm *SubagentManager) buildSystemPrompt(task string) string {
 		goos = "macOS"
 	}
 
-	_ = task // task is in the user message, not repeated in prompt
 	return strings.Join([]string{
 		"# Subagent",
 		"",
