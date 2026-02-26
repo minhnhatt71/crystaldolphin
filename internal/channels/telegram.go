@@ -26,7 +26,7 @@ type TelegramChannel struct {
 }
 
 // NewTelegramChannel creates a TelegramChannel.
-func NewTelegramChannel(cfg *channel.TelegramConfig, b *bus.MessageBus) *TelegramChannel {
+func NewTelegramChannel(cfg *channel.TelegramConfig, b bus.Bus) *TelegramChannel {
 	return &TelegramChannel{
 		Base: NewBase("telegram", b, cfg.AllowFrom),
 		cfg:  cfg,
@@ -169,13 +169,13 @@ func (t *TelegramChannel) Send(_ context.Context, msg bus.OutboundMessage) error
 	if t.bot == nil {
 		return fmt.Errorf("telegram: bot not running")
 	}
-	chatID, err := parseChatID(msg.ChatID)
+	chatID, err := parseChatID(msg.ChatID())
 	if err != nil {
 		return err
 	}
 
 	// Send media files first.
-	for _, mediaPath := range msg.Media {
+	for _, mediaPath := range msg.Media() {
 		f, err := os.Open(mediaPath)
 		if err != nil {
 			continue
@@ -193,14 +193,14 @@ func (t *TelegramChannel) Send(_ context.Context, msg bus.OutboundMessage) error
 		_, _ = t.bot.Send(sendCfg)
 	}
 
-	if msg.Content == "" || msg.Content == "[empty message]" {
+	if msg.Content() == "" || msg.Content() == "[empty message]" {
 		return nil
 	}
 
 	// Get optional reply-to message ID.
 	var replyMsgID int
 	if t.cfg.ReplyToMessage {
-		if mid, ok := msg.Metadata["message_id"]; ok {
+		if mid, ok := msg.Metadata()["message_id"]; ok {
 			switch v := mid.(type) {
 			case int:
 				replyMsgID = v
@@ -210,7 +210,7 @@ func (t *TelegramChannel) Send(_ context.Context, msg bus.OutboundMessage) error
 		}
 	}
 
-	for _, chunk := range splitMessage(msg.Content, 4000) {
+	for _, chunk := range splitMessage(msg.Content(), 4000) {
 		html := markdownToTelegramHTML(chunk)
 		m := tgbotapi.NewMessage(chatID, html)
 		m.ParseMode = "HTML"

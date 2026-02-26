@@ -12,11 +12,11 @@ import (
 // Manager owns all enabled channels and routes outbound messages.
 type Manager struct {
 	channels map[string]schema.Channel
-	b        *bus.MessageBus
+	b        bus.Bus
 }
 
 // NewManager creates a Manager and initialises all enabled channels.
-func NewManager(cfg *config.Config, b *bus.MessageBus) *Manager {
+func NewManager(cfg *config.Config, b bus.Bus) *Manager {
 	m := &Manager{
 		channels: make(map[string]schema.Channel),
 		b:        b,
@@ -105,14 +105,14 @@ func (m *Manager) StartAll(ctx context.Context) error {
 func (m *Manager) dispatchOutbound(ctx context.Context) {
 	for {
 		select {
-		case msg := <-m.b.Outbound:
-			ch, ok := m.channels[msg.Channel]
+		case msg := <-m.b.SubscribeOutbound():
+			ch, ok := m.channels[msg.Channel()]
 			if !ok {
-				slog.Debug("unknown channel for outbound message", "channel", msg.Channel)
+				slog.Debug("unknown channel for outbound message", "channel", msg.Channel())
 				continue
 			}
 			if err := ch.Send(ctx, msg); err != nil {
-				slog.Error("send error", "channel", msg.Channel, "err", err)
+				slog.Error("send error", "channel", msg.Channel(), "err", err)
 			}
 		case <-ctx.Done():
 			return

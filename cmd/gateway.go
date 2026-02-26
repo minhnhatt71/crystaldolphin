@@ -85,11 +85,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 
 		resp := loop.ProcessDirect(ctx, job.Payload.Message, sessionKey, ch, chatID)
 		if job.Payload.Deliver && job.Payload.To != nil {
-			messageBus.Outbound <- bus.OutboundMessage{
-				Channel: ch,
-				ChatID:  chatID,
-				Content: resp,
-			}
+			messageBus.PublishOutbound(bus.NewOutboundMessage(ch, chatID, resp))
 		}
 		return resp, nil
 	})

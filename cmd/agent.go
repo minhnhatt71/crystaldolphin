@@ -75,7 +75,7 @@ func runSingleMessage(loop schema.AgentLooper, sessionKey, channel, chatID strin
 
 // runInteractive starts the REPL loop: reads lines from stdin, sends each to
 // the agent via the bus, and waits for each reply before prompting again.
-func runInteractive(loop schema.AgentLooper, msgBus *bus.MessageBus, channel, chatID string) error {
+func runInteractive(loop schema.AgentLooper, msgBus bus.Bus, channel, chatID string) error {
 	fmt.Printf("%s Interactive mode (type 'exit' or Ctrl+C to quit)\n\n", logo)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -126,27 +126,21 @@ func listenForSignals(cancel context.CancelFunc) {
 
 // sendAndWait pushes a message onto the inbound bus and blocks until the agent
 // publishes the final reply (or ctx is cancelled).
-func sendAndWait(ctx context.Context, msgBus *bus.MessageBus, channel, chatID, content string) {
-	msgBus.Inbound <- bus.InboundMessage{
-		Channel:   channel,
-		SenderID:  "user",
-		ChatID:    chatID,
-		Content:   content,
-		Timestamp: time.Now(),
-	}
+func sendAndWait(ctx context.Context, msgBus bus.Bus, channel, chatID, content string) {
+	msgBus.PublishInbound(bus.NewInboundMessage(channel, "user", chatID, content))
 
 	doneCh := make(chan struct{})
 	go func() {
 		defer close(doneCh)
 		for {
 			select {
-			case msg := <-msgBus.Outbound:
-				if prog, _ := msg.Metadata["_progress"].(bool); prog {
-					fmt.Printf("  ↳ %s\n", msg.Content)
+			case msg := <-msgBus.SubscribeOutbound():
+				if prog, _ := msg.Metadata()["_progress"].(bool); prog {
+					fmt.Printf("  ↳ %s\n", msg.Content())
 					continue
 				}
-				if msg.Content != "" {
-					printResponse(msg.Content)
+				if msg.Content() != "" {
+					printResponse(msg.Content())
 				}
 				return
 			case <-ctx.Done():

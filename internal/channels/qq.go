@@ -32,7 +32,7 @@ type QQChannel struct {
 	seenQueue []string
 }
 
-func NewQQChannel(cfg *channel.QQConfig, b *bus.MessageBus) *QQChannel {
+func NewQQChannel(cfg *channel.QQConfig, b bus.Bus) *QQChannel {
 	return &QQChannel{
 		Base:       NewBase("qq", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -249,14 +249,14 @@ func (q *QQChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
 		return err
 	}
 	body := map[string]any{
-		"content":  msg.Content,
+		"content":  msg.Content(),
 		"msg_type": 0,
 	}
-	if mid, ok := msg.Metadata["message_id"].(string); ok {
+	if mid, ok := msg.Metadata()["message_id"].(string); ok {
 		body["msg_id"] = mid
 	}
 	data, _ := json.Marshal(body)
-	url := fmt.Sprintf("https://api.sgroup.qq.com/v2/users/%s/messages", msg.ChatID)
+	url := fmt.Sprintf("https://api.sgroup.qq.com/v2/users/%s/messages", msg.ChatID())
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
 	if err != nil {
 		return err

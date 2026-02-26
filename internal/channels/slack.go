@@ -23,7 +23,7 @@ type SlackChannel struct {
 	botUserID string
 }
 
-func NewSlackChannel(cfg *channel.SlackConfig, b *bus.MessageBus) *SlackChannel {
+func NewSlackChannel(cfg *channel.SlackConfig, b bus.Bus) *SlackChannel {
 	return &SlackChannel{
 		Base: NewBase("slack", b, nil), // Slack uses its own allow logic
 		cfg:  cfg,
@@ -193,18 +193,18 @@ func (s *SlackChannel) Send(ctx context.Context, msg bus.OutboundMessage) error 
 		return nil
 	}
 	slack := map[string]any{}
-	if m, ok := msg.Metadata["slack"].(map[string]any); ok {
+	if m, ok := msg.Metadata()["slack"].(map[string]any); ok {
 		slack = m
 	}
 	threadTS, _ := slack["thread_ts"].(string)
 	channelType, _ := slack["channel_type"].(string)
 
 	var options []slackgo.MsgOption
-	options = append(options, slackgo.MsgOptionText(msg.Content, false))
+	options = append(options, slackgo.MsgOptionText(msg.Content(), false))
 	if threadTS != "" && channelType != "im" {
 		options = append(options, slackgo.MsgOptionTS(threadTS))
 	}
 
-	_, _, err := s.webClient.PostMessageContext(ctx, msg.ChatID, options...)
+	_, _, err := s.webClient.PostMessageContext(ctx, msg.ChatID(), options...)
 	return err
 }

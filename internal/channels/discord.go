@@ -34,7 +34,7 @@ type DiscordChannel struct {
 	seq        *int
 }
 
-func NewDiscordChannel(cfg *channel.DiscordConfig, b *bus.MessageBus) *DiscordChannel {
+func NewDiscordChannel(cfg *channel.DiscordConfig, b bus.Bus) *DiscordChannel {
 	return &DiscordChannel{
 		Base:       NewBase("discord", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -241,15 +241,15 @@ func (d *DiscordChannel) sendTypingLoop(ctx context.Context, channelID string) {
 }
 
 func (d *DiscordChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
-	url := discordAPI + "/channels/" + msg.ChatID + "/messages"
-	chunks := splitMessage(msg.Content, discordMaxMsgLen)
+	url := discordAPI + "/channels/" + msg.ChatID() + "/messages"
+	chunks := splitMessage(msg.Content(), discordMaxMsgLen)
 	if len(chunks) == 0 {
 		return nil
 	}
 	for i, chunk := range chunks {
 		payload := map[string]any{"content": chunk}
-		if i == 0 && msg.ReplyTo != "" {
-			payload["message_reference"] = map[string]any{"message_id": msg.ReplyTo}
+		if i == 0 && msg.ReplyTo() != "" {
+			payload["message_reference"] = map[string]any{"message_id": msg.ReplyTo()}
 			payload["allowed_mentions"] = map[string]any{"replied_user": false}
 		}
 		if err := d.postJSON(ctx, url, payload); err != nil {

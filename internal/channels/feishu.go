@@ -29,7 +29,7 @@ type FeishuChannel struct {
 	tokenExp   time.Time
 }
 
-func NewFeishuChannel(cfg *channel.FeishuConfig, b *bus.MessageBus) *FeishuChannel {
+func NewFeishuChannel(cfg *channel.FeishuConfig, b bus.Bus) *FeishuChannel {
 	return &FeishuChannel{
 		Base:       NewBase("feishu", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -263,14 +263,14 @@ func (f *FeishuChannel) Send(ctx context.Context, msg bus.OutboundMessage) error
 
 	// Determine receive_id_type based on chat_id prefix.
 	idType := "chat_id"
-	if strings.HasPrefix(msg.ChatID, "ou_") {
+	if strings.HasPrefix(msg.ChatID(), "ou_") {
 		idType = "open_id"
 	}
 
 	body := map[string]any{
-		"receive_id": msg.ChatID,
+		"receive_id": msg.ChatID(),
 		"msg_type":   "text",
-		"content":    `{"text":"` + escapeFeishuText(msg.Content) + `"}`,
+		"content":    `{"text":"` + escapeFeishuText(msg.Content()) + `"}`,
 	}
 	data, _ := json.Marshal(body)
 

@@ -28,7 +28,7 @@ type DingTalkChannel struct {
 	tokenExp   time.Time
 }
 
-func NewDingTalkChannel(cfg *channel.DingTalkConfig, b *bus.MessageBus) *DingTalkChannel {
+func NewDingTalkChannel(cfg *channel.DingTalkConfig, b bus.Bus) *DingTalkChannel {
 	return &DingTalkChannel{
 		Base:       NewBase("dingtalk", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -208,9 +208,9 @@ func (d *DingTalkChannel) Send(ctx context.Context, msg bus.OutboundMessage) err
 	}
 	body := map[string]any{
 		"robotCode": d.cfg.ClientID,
-		"userIds":   []string{msg.ChatID},
+		"userIds":   []string{msg.ChatID()},
 		"msgKey":    "sampleText",
-		"msgParam":  `{"content":"` + escapeDingTalk(msg.Content) + `"}`,
+		"msgParam":  `{"content":"` + escapeDingTalk(msg.Content()) + `"}`,
 	}
 	data, _ := json.Marshal(body)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost,

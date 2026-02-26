@@ -20,13 +20,13 @@ import (
 // Callers use the typed getter methods; they never need to import dig directly.
 type Container struct {
 	provider schema.LLMProvider
-	msgBus   *bus.MessageBus
+	msgBus   bus.Bus
 	loop     schema.AgentLooper
 	cronSvc  *cron.JobManager
 }
 
 func (c *Container) Provider() schema.LLMProvider  { return c.provider }
-func (c *Container) MessageBus() *bus.MessageBus   { return c.msgBus }
+func (c *Container) MessageBus() bus.Bus            { return c.msgBus }
 func (c *Container) AgentLoop() schema.AgentLooper { return c.loop }
 func (c *Container) CronService() *cron.JobManager { return c.cronSvc }
 
@@ -89,7 +89,7 @@ func New(cfg *config.Config) (*Container, error) {
 	var result *Container
 	err := d.Invoke(func(
 		provider schema.LLMProvider,
-		msgBus *bus.MessageBus,
+		msgBus bus.Bus,
 		loop schema.AgentLooper,
 		cronSvc *cron.JobManager,
 	) {
@@ -136,7 +136,7 @@ func isOAuthProvider(name string) bool {
 	return spec != nil && spec.IsOAuth
 }
 
-func newMessageBus() *bus.MessageBus {
+func newMessageBus() bus.Bus {
 	return bus.NewMessageBus(100)
 }
 
@@ -178,7 +178,7 @@ func newSubAgentToolRegistry(cfg *config.Config) SubagentRegistry {
 	return SubagentRegistry{registry}
 }
 
-func newSubagentManager(p schema.LLMProvider, b *bus.MessageBus, cfg *config.Config, m LLMModel, reg SubagentRegistry) *agent.SubagentManager {
+func newSubagentManager(p schema.LLMProvider, b bus.Bus, cfg *config.Config, m LLMModel, reg SubagentRegistry) *agent.SubagentManager {
 	return agent.NewSubagentManager(
 		p, cfg.WorkspacePath(), b,
 		string(m),
@@ -190,7 +190,7 @@ func newSubagentManager(p schema.LLMProvider, b *bus.MessageBus, cfg *config.Con
 
 func newAgentRegistry(
 	cfg *config.Config,
-	b *bus.MessageBus,
+	b bus.Bus,
 	subMgr *agent.SubagentManager,
 	cronMgr *cron.JobManager,
 ) AgentRegistry {
@@ -233,7 +233,7 @@ func newContextBuilder(cfg *config.Config, mem *agent.FileMemoryStore, sl *agent
 }
 
 func newAgentLoop(
-	b *bus.MessageBus,
+	b bus.Bus,
 	p schema.LLMProvider,
 	cfg *config.Config,
 	sessions *session.Manager,

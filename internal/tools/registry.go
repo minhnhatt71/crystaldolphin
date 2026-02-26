@@ -25,12 +25,12 @@ type Registry struct {
 	tools map[string]schema.Tool
 }
 
-// GetTool returns the tool with the given name, or nil.
-func (r *Registry) GetTool(name ToolName) schema.Tool {
+// Get returns the tool with the given name, or nil.
+func (r *Registry) Get(name ToolName) schema.Tool {
 	return r.tools[string(name)]
 }
 
-func (r *Registry) AllTools() ToolList {
+func (r *Registry) GetAll() ToolList {
 	list := ToolList{tools: make(map[string]schema.Tool, len(r.tools))}
 	for k, t := range r.tools {
 		list.tools[k] = t

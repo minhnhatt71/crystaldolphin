@@ -20,7 +20,7 @@ import (
 type SubagentManager struct {
 	provider    schema.LLMProvider
 	workspace   string
-	bus         *bus.MessageBus
+	bus         bus.Bus
 	model       string
 	temperature float64
 	maxTokens   int
@@ -36,7 +36,7 @@ type SubagentManager struct {
 func NewSubagentManager(
 	provider schema.LLMProvider,
 	workspace string,
-	msgBus *bus.MessageBus,
+	msgBus bus.Bus,
 	model string,
 	temperature float64,
 	maxTokens int,
@@ -69,6 +69,7 @@ func (sm *SubagentManager) Spawn(
 	}
 
 	subCtx, cancel := context.WithCancel(context.Background()) // detached from caller
+
 	sm.mu.Lock()
 	sm.running[taskID] = cancel
 	sm.mu.Unlock()
@@ -117,7 +118,7 @@ func (sm *SubagentManager) runSubagent(
 }
 
 func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
-	tls := sm.reg.AllTools()
+	tls := sm.reg.GetAll()
 
 	msgs := schema.NewMessages(
 		schema.NewSystemMessage(sm.buildSystemPrompt(task)),
@@ -193,13 +194,7 @@ Result:
 Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not mention technical details like "subagent" or task IDs.`,
 		label, status, task, result)
 
-	sm.bus.Inbound <- bus.InboundMessage{
-		Channel:   "system",
-		SenderID:  "subagent",
-		ChatID:    originChannel + ":" + originChatID,
-		Content:   content,
-		Timestamp: time.Now(),
-	}
+	sm.bus.PublishInbound(bus.NewInboundMessage("system", "subagent", originChannel+":"+originChatID, content))
 }
 
 func (sm *SubagentManager) buildSystemPrompt(task string) string {

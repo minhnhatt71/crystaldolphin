@@ -21,7 +21,7 @@ type WhatsAppChannel struct {
 	connected bool
 }
 
-func NewWhatsAppChannel(cfg *channel.WhatsAppConfig, b *bus.MessageBus) *WhatsAppChannel {
+func NewWhatsAppChannel(cfg *channel.WhatsAppConfig, b bus.Bus) *WhatsAppChannel {
 	return &WhatsAppChannel{
 		Base: NewBase("whatsapp", b, cfg.AllowFrom),
 		cfg:  cfg,
@@ -130,8 +130,8 @@ func (w *WhatsAppChannel) Send(_ context.Context, msg bus.OutboundMessage) error
 	}
 	payload, _ := json.Marshal(map[string]string{
 		"type": "send",
-		"to":   msg.ChatID,
-		"text": msg.Content,
+		"to":   msg.ChatID(),
+		"text": msg.Content(),
 	})
 	return w.conn.WriteMessage(websocket.TextMessage, payload)
 }

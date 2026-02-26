@@ -24,7 +24,7 @@ type EmailChannel struct {
 	seenUID map[uint32]bool
 }
 
-func NewEmailChannel(cfg *channel.EmailConfig, b *bus.MessageBus) *EmailChannel {
+func NewEmailChannel(cfg *channel.EmailConfig, b bus.Bus) *EmailChannel {
 	return &EmailChannel{
 		Base:    NewBase("email", b, cfg.AllowFrom),
 		cfg:     cfg,
@@ -169,14 +169,14 @@ func (e *EmailChannel) poll(ctx context.Context) error {
 }
 
 func (e *EmailChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
-	to := msg.ChatID
+	to := msg.ChatID()
 	subject := e.cfg.SubjectPrefix + "Message"
-	if s, ok := msg.Metadata["subject"].(string); ok && s != "" {
+	if s, ok := msg.Metadata()["subject"].(string); ok && s != "" {
 		subject = e.cfg.SubjectPrefix + s
 	}
 
 	body := fmt.Sprintf("To: %s\r\nFrom: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n%s",
-		to, e.cfg.FromAddress, subject, msg.Content)
+		to, e.cfg.FromAddress, subject, msg.Content())
 
 	addr := net.JoinHostPort(e.cfg.SMTPHost, fmt.Sprintf("%d", e.cfg.SMTPPort))
 	auth := smtp.PlainAuth("", e.cfg.SMTPUsername, e.cfg.SMTPPassword, e.cfg.SMTPHost)

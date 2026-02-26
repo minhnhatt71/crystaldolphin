@@ -4,7 +4,6 @@ package channels
 import (
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 )
@@ -12,12 +11,12 @@ import (
 // Base holds common state and helper methods shared by all channels.
 type Base struct {
 	channelName string
-	b           *bus.MessageBus
+	b           bus.Bus
 	allowFrom   []string // empty = allow all
 }
 
 // NewBase creates a Base with the given channel name, bus, and allowlist.
-func NewBase(name string, b *bus.MessageBus, allowFrom []string) Base {
+func NewBase(name string, b bus.Bus, allowFrom []string) Base {
 	return Base{channelName: name, b: b, allowFrom: allowFrom}
 }
 
@@ -51,23 +50,19 @@ func (b *Base) IsAllowed(senderID string) bool {
 
 // HandleMessage verifies the sender is allowed, then pushes an InboundMessage to the bus.
 func (b *Base) HandleMessage(
-	senderID, chatID, content string,
+	senderId, chatId, content string,
 	media []string,
 	metadata map[string]any,
 ) {
-	if !b.IsAllowed(senderID) {
-		slog.Warn("access denied", "channel", b.channelName, "sender", senderID)
+	if !b.IsAllowed(senderId) {
+		slog.Warn("access denied", "channel", b.channelName, "sender", senderId)
 		return
 	}
-	b.b.Inbound <- bus.InboundMessage{
-		Channel:   b.channelName,
-		SenderID:  senderID,
-		ChatID:    chatID,
-		Content:   content,
-		Timestamp: time.Now(),
-		Media:     media,
-		Metadata:  metadata,
-	}
+
+	msg := bus.NewInboundMessage(b.channelName, senderId, chatId, content)
+	msg.SetMedia(media)
+	msg.SetMetadata(metadata)
+	b.b.PublishInbound(msg)
 }
 
 // splitMessage splits content into chunks that fit within maxLen,
