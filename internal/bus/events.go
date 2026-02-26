@@ -26,16 +26,16 @@ func NewInboundMessage(channel, senderID, chatID, content string) InboundMessage
 	}
 }
 
-func (m InboundMessage) Channel() string         { return m.channel }
-func (m InboundMessage) SenderID() string        { return m.senderID }
-func (m InboundMessage) ChatID() string          { return m.chatID }
-func (m InboundMessage) Content() string         { return m.content }
-func (m InboundMessage) Timestamp() time.Time    { return m.timestamp }
-func (m InboundMessage) Media() []string         { return m.media }
+func (m InboundMessage) Channel() string          { return m.channel }
+func (m InboundMessage) SenderID() string         { return m.senderID }
+func (m InboundMessage) ChatID() string           { return m.chatID }
+func (m InboundMessage) Content() string          { return m.content }
+func (m InboundMessage) Timestamp() time.Time     { return m.timestamp }
+func (m InboundMessage) Media() []string          { return m.media }
 func (m InboundMessage) Metadata() map[string]any { return m.metadata }
 
-func (m *InboundMessage) SetMedia(media []string)        { m.media = media }
-func (m *InboundMessage) SetMetadata(md map[string]any)  { m.metadata = md }
+func (m *InboundMessage) SetMedia(media []string)       { m.media = media }
+func (m *InboundMessage) SetMetadata(md map[string]any) { m.metadata = md }
 
 // SessionKey returns the unique key used to look up the conversation session.
 // Format: "channel:chat_id" — mirrors nanobot's InboundMessage.session_key.
@@ -79,6 +79,6 @@ func (m OutboundMessage) ReplyTo() string          { return m.replyTo }
 func (m OutboundMessage) Media() []string          { return m.media }
 func (m OutboundMessage) Metadata() map[string]any { return m.metadata }
 
-func (m *OutboundMessage) SetReplyTo(id string)         { m.replyTo = id }
+func (m *OutboundMessage) SetReplyTo(id string)          { m.replyTo = id }
 func (m *OutboundMessage) SetMedia(media []string)       { m.media = media }
 func (m *OutboundMessage) SetMetadata(md map[string]any) { m.metadata = md }

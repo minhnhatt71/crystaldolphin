@@ -14,7 +14,6 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
-
 // OpenAIProvider makes direct HTTP calls to any OpenAI-compatible endpoint,
 // and also handles the Anthropic Messages API as a special case.
 type OpenAIProvider struct {

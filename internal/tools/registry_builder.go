@@ -2,7 +2,6 @@ package tools
 
 import "github.com/crystaldolphin/crystaldolphin/internal/schema"
 
-
 // RegistryBuilder accumulates tools during the construction phase.
 // Call Build() to produce an immutable Registry ready for use.
 type RegistryBuilder struct {

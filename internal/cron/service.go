@@ -98,9 +98,9 @@ func NewService(storePath string) *JobManager {
 	}
 }
 
-// SetOnJob registers the callback executed when a job fires.
+// OnJobStart registers the callback executed when a job fires.
 // Must be set before Start().
-func (s *JobManager) SetOnJob(fn OnJobFunc) { s.onJob = fn }
+func (s *JobManager) OnJobStart(fn OnJobFunc) { s.onJob = fn }
 
 // Start loads jobs from disk, (re)computes next-run times, and arms all timers.
 // Blocks until ctx is cancelled.

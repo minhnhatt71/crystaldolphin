@@ -15,15 +15,15 @@ import (
 
 // denyPatterns mirrors Python ExecTool's deny_patterns exactly.
 var denyPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)\brm\s+-[rf]{1,2}\b`),          // rm -r, rm -rf, rm -fr
-	regexp.MustCompile(`(?i)\bdel\s+/[fq]\b`),              // del /f, del /q
-	regexp.MustCompile(`(?i)\brmdir\s+/s\b`),               // rmdir /s
-	regexp.MustCompile(`(?i)(?:^|[;&|]\s*)format\b`),       // format (standalone)
-	regexp.MustCompile(`(?i)\b(mkfs|diskpart)\b`),          // disk ops
-	regexp.MustCompile(`(?i)\bdd\s+if=`),                   // dd
-	regexp.MustCompile(`(?i)>\s*/dev/sd`),                  // write to disk
+	regexp.MustCompile(`(?i)\brm\s+-[rf]{1,2}\b`),            // rm -r, rm -rf, rm -fr
+	regexp.MustCompile(`(?i)\bdel\s+/[fq]\b`),                // del /f, del /q
+	regexp.MustCompile(`(?i)\brmdir\s+/s\b`),                 // rmdir /s
+	regexp.MustCompile(`(?i)(?:^|[;&|]\s*)format\b`),         // format (standalone)
+	regexp.MustCompile(`(?i)\b(mkfs|diskpart)\b`),            // disk ops
+	regexp.MustCompile(`(?i)\bdd\s+if=`),                     // dd
+	regexp.MustCompile(`(?i)>\s*/dev/sd`),                    // write to disk
 	regexp.MustCompile(`(?i)\b(shutdown|reboot|poweroff)\b`), // power control
-	regexp.MustCompile(`:\(\)\s*\{.*\};\s*:`),              // fork bomb
+	regexp.MustCompile(`:\(\)\s*\{.*\};\s*:`),                // fork bomb
 }
 
 // ExecTool executes shell commands with safety guards.
@@ -48,8 +48,10 @@ func NewExecTool(workingDir string, timeoutSeconds int, restrictToWorkspace bool
 	}
 }
 
-func (e *ExecTool) Name() string        { return "exec" }
-func (e *ExecTool) Description() string { return "Execute a shell command and return its output. Use with caution." }
+func (e *ExecTool) Name() string { return "exec" }
+func (e *ExecTool) Description() string {
+	return "Execute a shell command and return its output. Use with caution."
+}
 func (e *ExecTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",

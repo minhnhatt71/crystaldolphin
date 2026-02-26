@@ -14,11 +14,10 @@ import (
 )
 
 // ContextBuilder assembles system prompts and message lists for the LLM.
-// Mirrors nanobot's Python ContextBuilder.
 type ContextBuilder struct {
 	workspace string
-	memory    *FileMemoryStore
-	skills    *SkillsLoader
+	memory    schema.MemoryStore
+	skills    schema.SkillLoader
 }
 
 // bootstrapFiles lists workspace files loaded into the system prompt.
@@ -26,14 +25,15 @@ var bootstrapFiles = []string{"AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "ID
 
 // NewContextBuilder creates a ContextBuilder for the given workspace.
 // mem and sl are injected by the dependency container.
-func NewContextBuilder(workspace string, mem *FileMemoryStore, sl *SkillsLoader) *ContextBuilder {
-	if mem == nil {
-		mem = &FileMemoryStore{}
+func NewContextBuilder(workspace string, memory schema.MemoryStore, skillsLoader schema.SkillLoader) *ContextBuilder {
+	if memory == nil {
+		memory = &FileMemoryStore{}
 	}
+
 	return &ContextBuilder{
 		workspace: workspace,
-		memory:    mem,
-		skills:    sl,
+		memory:    memory,
+		skills:    skillsLoader,
 	}
 }
 

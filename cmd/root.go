@@ -37,4 +37,3 @@ func init() {
 	rootCmd.AddCommand(channelsCmd)
 	rootCmd.AddCommand(providerCmd)
 }
-

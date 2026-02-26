@@ -9,14 +9,9 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
-)
 
-// SkillInfo holds metadata about a single skill.
-type SkillInfo struct {
-	Name   string // directory name
-	Path   string // absolute path to SKILL.md
-	Source string // "workspace" or "builtin"
-}
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
+)
 
 // skillMeta is the YAML frontmatter structure of a SKILL.md file.
 type skillMeta struct {
@@ -38,7 +33,7 @@ type nanobotMeta struct {
 // SkillsLoader scans workspace and builtin skills directories and builds
 // context summaries.  Mirrors nanobot's Python SkillsLoader exactly.
 type SkillsLoader struct {
-	workspace      string // workspace root (contains skills/ subdir)
+	workspace       string // workspace root (contains skills/ subdir)
 	workspaceSkills string
 	builtinSkills   string // path to embedded/bundled skills root
 }
@@ -55,9 +50,9 @@ func NewSkillsLoader(workspace, builtinSkillsDir string) *SkillsLoader {
 
 // ListSkills returns all available skills.
 // If filterUnavailable is true, skills with unmet requirements are excluded.
-func (sl *SkillsLoader) ListSkills(filterUnavailable bool) []SkillInfo {
+func (sl *SkillsLoader) ListSkills(filterUnavailable bool) []schema.SkillInfo {
 	seen := map[string]bool{}
-	var skills []SkillInfo
+	var skills []schema.SkillInfo
 
 	// Workspace skills have highest priority.
 	if entries, err := os.ReadDir(sl.workspaceSkills); err == nil {
@@ -67,7 +62,7 @@ func (sl *SkillsLoader) ListSkills(filterUnavailable bool) []SkillInfo {
 			}
 			p := filepath.Join(sl.workspaceSkills, e.Name(), "SKILL.md")
 			if _, err := os.Stat(p); err == nil {
-				skills = append(skills, SkillInfo{Name: e.Name(), Path: p, Source: "workspace"})
+				skills = append(skills, schema.SkillInfo{Name: e.Name(), Path: p, Source: "workspace"})
 				seen[e.Name()] = true
 			}
 		}
@@ -82,7 +77,7 @@ func (sl *SkillsLoader) ListSkills(filterUnavailable bool) []SkillInfo {
 				}
 				p := filepath.Join(sl.builtinSkills, e.Name(), "SKILL.md")
 				if _, err := os.Stat(p); err == nil {
-					skills = append(skills, SkillInfo{Name: e.Name(), Path: p, Source: "builtin"})
+					skills = append(skills, schema.SkillInfo{Name: e.Name(), Path: p, Source: "builtin"})
 				}
 			}
 		}
@@ -91,9 +86,9 @@ func (sl *SkillsLoader) ListSkills(filterUnavailable bool) []SkillInfo {
 	if !filterUnavailable {
 		return skills
 	}
-	var out []SkillInfo
+	var out []schema.SkillInfo
 	for _, s := range skills {
-		m := sl.getNanobotMeta(s.Name)
+		m := sl.getCrystalDolphinMeta(s.Name)
 		if sl.checkRequirements(m) {
 			out = append(out, s)
 		}
@@ -142,7 +137,7 @@ func (sl *SkillsLoader) BuildSkillsSummary() string {
 	var sb strings.Builder
 	sb.WriteString("<skills>\n")
 	for _, s := range all {
-		m := sl.getNanobotMeta(s.Name)
+		m := sl.getCrystalDolphinMeta(s.Name)
 		available := sl.checkRequirements(m)
 		desc := sl.getSkillDescription(s.Name)
 
@@ -167,11 +162,12 @@ func (sl *SkillsLoader) GetAlwaysSkills() []string {
 	var result []string
 	for _, s := range sl.ListSkills(true) {
 		fm := sl.getSkillFrontmatter(s.Name)
-		nm := sl.getNanobotMeta(s.Name)
+		nm := sl.getCrystalDolphinMeta(s.Name)
 		if fm.Always || nm.Always {
 			result = append(result, s.Name)
 		}
 	}
+
 	return result
 }
 
@@ -196,7 +192,7 @@ func (sl *SkillsLoader) getSkillFrontmatter(name string) skillMeta {
 	return m
 }
 
-func (sl *SkillsLoader) getNanobotMeta(name string) nanobotMeta {
+func (sl *SkillsLoader) getCrystalDolphinMeta(name string) nanobotMeta {
 	fm := sl.getSkillFrontmatter(name)
 	if fm.Metadata == "" {
 		return nanobotMeta{}

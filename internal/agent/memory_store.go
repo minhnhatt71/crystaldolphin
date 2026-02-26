@@ -11,24 +11,7 @@ import (
 	"time"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
-	"github.com/crystaldolphin/crystaldolphin/internal/session"
 )
-
-// SessionSaver is the subset of session.Manager needed by Consolidate.
-type SessionSaver interface {
-	Save(s *session.Session) error
-}
-
-type MemoryStore interface {
-	ReadLongTerm() string
-	WriteLongTerm(content string) error
-	AppendHistory(entry string) error
-	GetMemoryContext() string
-	Consolidate(ctx context.Context,
-		s *session.Session, saver SessionSaver, provider schema.LLMProvider,
-		model string, archiveAll bool, memoryWindow int,
-	) error
-}
 
 type FileMemoryStore struct {
 	memoryDir       string
@@ -36,7 +19,7 @@ type FileMemoryStore struct {
 	historyFilePath string
 }
 
-// NewMemoryStore creates a MemoryStore rooted at workspace.
+// NewMemoryStore creates a FileMemoryStore rooted at workspace.
 // The memory/ subdirectory is created if it does not exist.
 func NewMemoryStore(workspace string) (*FileMemoryStore, error) {
 	dir := filepath.Join(workspace, "memory")
@@ -100,16 +83,16 @@ func (m *FileMemoryStore) GetMemoryContext() string {
 // archiveAll=true processes every message (used on /new); otherwise only the
 // slice between LastConsolidated and len-keepCount is processed.
 func (m *FileMemoryStore) Consolidate(ctx context.Context,
-	s *session.Session,
-	saver SessionSaver,
+	s schema.ConsolidatableSession,
+	saver schema.SessionSaver,
 	provider schema.LLMProvider,
 	model string,
 	archiveAll bool,
 	memoryWindow int,
 ) error {
 	s.Lock()
-	x := s.Messages.Clone()
-	lastConsolidated := s.LastConsolidated
+	x := s.CopyMessages()
+	lastConsolidated := s.LastConsolidated()
 	s.Unlock()
 
 	var oldMessages []schema.Message
@@ -173,7 +156,9 @@ func (m *FileMemoryStore) Consolidate(ctx context.Context,
 	)
 
 	messages := schema.NewMessages(
-		schema.NewSystemMessage("You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation."),
+		schema.NewSystemMessage(
+			"You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation.",
+		),
 		schema.NewUserMessage(prompt),
 	)
 
@@ -215,20 +200,20 @@ func (m *FileMemoryStore) Consolidate(ctx context.Context,
 	// not s.Messages.Messages which may have grown concurrently.
 	if archiveAll {
 		s.Lock()
-		s.LastConsolidated = 0
+		s.SetLastConsolidated(0)
 		s.Unlock()
 	} else {
-		// Compact drops already-consolidated messages and resets LastConsolidated
+		// Compact drops already-consolidated messages and resets lastConsolidated
 		// to 0 (the tail is now the start of the slice).
 		s.Compact(keepCount)
 	}
 
 	// Persist the updated pointer immediately so it survives a restart.
-	if err := saver.Save(s); err != nil {
+	if err := saver.SaveConsolidated(s); err != nil {
 		slog.Warn("memory consolidation: failed to persist session pointer", "err", err)
 	}
 
-	slog.Info("memory consolidation done", "messages", len(msgs), "last_consolidated", s.LastConsolidated)
+	slog.Info("memory consolidation done", "messages", len(msgs), "last_consolidated", s.LastConsolidated())
 
 	return nil
 }

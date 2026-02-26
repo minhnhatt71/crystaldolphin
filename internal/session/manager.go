@@ -80,7 +80,7 @@ func (m *Manager) Save(s *Session) error {
 		"created_at":        s.CreatedAt.UTC().Format(time.RFC3339),
 		"updated_at":        time.Now().UTC().Format(time.RFC3339),
 		"metadata":          s.Metadata,
-		"last_consolidated": s.LastConsolidated,
+		"last_consolidated": s.LastConsolidated(),
 	}
 	s.mu.Unlock()
 
@@ -101,6 +101,16 @@ func (m *Manager) Save(s *Session) error {
 
 	m.cache.Store(s.Key, s)
 	return nil
+}
+
+// SaveConsolidated implements schema.SessionSaver for use by memory consolidation.
+// It casts the ConsolidatableSession back to *Session and delegates to Save.
+func (m *Manager) SaveConsolidated(s schema.ConsolidatableSession) error {
+	sess, ok := s.(*Session)
+	if !ok {
+		return fmt.Errorf("session.Manager.SaveConsolidated: unexpected type %T", s)
+	}
+	return m.Save(sess)
 }
 
 // Invalidate removes a session from the in-memory cache (used after /new).
@@ -342,12 +352,5 @@ func (m *Manager) load(key string) *Session {
 		createdAt = time.Now()
 	}
 
-	return &Session{
-		Key:              key,
-		Messages:         messages,
-		CreatedAt:        createdAt,
-		UpdatedAt:        time.Now(),
-		Metadata:         meta,
-		LastConsolidated: lastConsolidated,
-	}
+	return newSession(key, messages, createdAt, time.Now(), meta, lastConsolidated)
 }

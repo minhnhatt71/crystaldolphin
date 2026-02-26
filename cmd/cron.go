@@ -193,7 +193,7 @@ var cronRunCmd = &cobra.Command{
 		loop := c.AgentLoop()
 
 		svc := cron.NewService(cronStorePath())
-		svc.SetOnJob(func(ctx context.Context, job cron.CronJob) (string, error) {
+		svc.OnJobStart(func(ctx context.Context, job cron.CronJob) (string, error) {
 			ch := "cli"
 			chatID := "direct"
 			if job.Payload.Channel != nil {

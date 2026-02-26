@@ -69,7 +69,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 	loop := svc.AgentLoop()
 
 	// Wire cron → agent callback.
-	cronService.SetOnJob(func(ctx context.Context, job cron.CronJob) (string, error) {
+	cronService.OnJobStart(func(ctx context.Context, job cron.CronJob) (string, error) {
 		sessionKey := "cron:" + job.ID
 		ch := ""
 		chatID := "direct"

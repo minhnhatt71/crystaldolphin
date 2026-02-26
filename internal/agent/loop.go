@@ -33,10 +33,10 @@ type AgentLoop struct {
 	temperature  float64
 	maxTokens    int
 	memoryWindow int
-	workspace    string
 
 	agentContext *ContextBuilder
 	sessions     *session.Manager
+	mem          schema.MemoryStore
 	tools        tools.ToolList
 
 	subagents *SubagentManager
@@ -57,11 +57,11 @@ func NewAgentLoop(
 	provider schema.LLMProvider,
 	cfg *config.Config,
 	sessions *session.Manager,
+	mem schema.MemoryStore,
 	registry *tools.Registry,
 	subagents *SubagentManager,
 	ctxBuilder *ContextBuilder,
 ) *AgentLoop {
-	workspace := cfg.WorkspacePath()
 	model := cfg.Agents.Defaults.Model
 	if model == "" {
 		model = provider.DefaultModel()
@@ -76,9 +76,9 @@ func NewAgentLoop(
 		temperature:   cfg.Agents.Defaults.Temperature,
 		maxTokens:     cfg.Agents.Defaults.MaxTokens,
 		memoryWindow:  cfg.Agents.Defaults.MemoryWindow,
-		workspace:     workspace,
 		agentContext:  ctxBuilder,
 		sessions:      sessions,
+		mem:           mem,
 		tools:         registry.GetAll(),
 		subagents:     subagents,
 		consolidating: make(map[string]bool),
@@ -228,13 +228,8 @@ func (loop *AgentLoop) handleCmdNew(
 	loop.sessions.Invalidate(key)
 
 	go func() {
-		tmp := &session.Session{Key: key, Messages: archived}
-		mem, err := NewMemoryStore(loop.workspace)
-		if err != nil {
-			slog.Error("Failed to create memory store for consolidation", "err", err)
-			return
-		}
-		err = mem.Consolidate(ctx, tmp, loop.sessions, loop.provider, loop.model, true, loop.memoryWindow)
+		tmp := session.NewArchivedSession(key, archived)
+		err := loop.mem.Consolidate(ctx, tmp, loop.sessions, loop.provider, loop.model, true, loop.memoryWindow)
 		if err != nil {
 			slog.Error("Memory consolidation failed", "err", err)
 		}
@@ -271,12 +266,7 @@ func (loop *AgentLoop) maybeConsolidateBackground(key string, sess *session.Sess
 			delete(loop.consolidating, key)
 			loop.consolidatingMu.Unlock()
 		}()
-		mem, err := NewMemoryStore(loop.workspace)
-		if err != nil {
-			slog.Error("Failed to create memory store for consolidation", "err", err)
-			return
-		}
-		err = mem.Consolidate(context.Background(), sess, loop.sessions, loop.provider, loop.model, false, loop.memoryWindow)
+		err := loop.mem.Consolidate(context.Background(), sess, loop.sessions, loop.provider, loop.model, false, loop.memoryWindow)
 		if err != nil {
 			slog.Error("Memory consolidation failed", "err", err)
 		}

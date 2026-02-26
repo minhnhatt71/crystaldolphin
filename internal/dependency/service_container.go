@@ -1,4 +1,3 @@
-// Package dependency wires core crystaldolphin services using go.uber.org/dig.
 package dependency
 
 import (
@@ -16,19 +15,19 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
 )
 
-// Container holds the resolved core service singletons.
+// ServiceContainer holds the resolved core service singletons.
 // Callers use the typed getter methods; they never need to import dig directly.
-type Container struct {
+type ServiceContainer struct {
 	provider schema.LLMProvider
 	msgBus   bus.Bus
 	loop     schema.AgentLooper
 	cronSvc  *cron.JobManager
 }
 
-func (c *Container) Provider() schema.LLMProvider  { return c.provider }
-func (c *Container) MessageBus() bus.Bus            { return c.msgBus }
-func (c *Container) AgentLoop() schema.AgentLooper { return c.loop }
-func (c *Container) CronService() *cron.JobManager { return c.cronSvc }
+func (c *ServiceContainer) Provider() schema.LLMProvider  { return c.provider }
+func (c *ServiceContainer) MessageBus() bus.Bus           { return c.msgBus }
+func (c *ServiceContainer) AgentLoop() schema.AgentLooper { return c.loop }
+func (c *ServiceContainer) CronService() *cron.JobManager { return c.cronSvc }
 
 // LLMModel is a named string type so dig can distinguish it from plain
 // strings when injecting the effective model name into providers that need it.
@@ -43,7 +42,7 @@ type AgentRegistry struct{ *tools.Registry }
 type SubagentRegistry struct{ *tools.Registry }
 
 // New builds and wires all core services from cfg.
-func New(cfg *config.Config) (*Container, error) {
+func New(cfg *config.Config) (*ServiceContainer, error) {
 	d := dig.New()
 
 	if err := d.Provide(func() *config.Config { return cfg }); err != nil {
@@ -86,14 +85,14 @@ func New(cfg *config.Config) (*Container, error) {
 		return nil, err
 	}
 
-	var result *Container
+	var result *ServiceContainer
 	err := d.Invoke(func(
 		provider schema.LLMProvider,
 		msgBus bus.Bus,
 		loop schema.AgentLooper,
 		cronSvc *cron.JobManager,
 	) {
-		result = &Container{
+		result = &ServiceContainer{
 			provider: provider,
 			msgBus:   msgBus,
 			loop:     loop,
@@ -216,7 +215,7 @@ func newAgentRegistry(
 	return AgentRegistry{registry}
 }
 
-func newMemoryStore(cfg *config.Config) (*agent.FileMemoryStore, error) {
+func newMemoryStore(cfg *config.Config) (schema.MemoryStore, error) {
 	mem, err := agent.NewMemoryStore(cfg.WorkspacePath())
 	if err != nil || mem == nil {
 		return &agent.FileMemoryStore{}, nil
@@ -224,11 +223,11 @@ func newMemoryStore(cfg *config.Config) (*agent.FileMemoryStore, error) {
 	return mem, nil
 }
 
-func newSkillsLoader(cfg *config.Config) *agent.SkillsLoader {
+func newSkillsLoader(cfg *config.Config) schema.SkillLoader {
 	return agent.NewSkillsLoader(cfg.WorkspacePath(), "")
 }
 
-func newContextBuilder(cfg *config.Config, mem *agent.FileMemoryStore, sl *agent.SkillsLoader) *agent.ContextBuilder {
+func newContextBuilder(cfg *config.Config, mem schema.MemoryStore, sl schema.SkillLoader) *agent.ContextBuilder {
 	return agent.NewContextBuilder(cfg.WorkspacePath(), mem, sl)
 }
 
@@ -237,9 +236,10 @@ func newAgentLoop(
 	p schema.LLMProvider,
 	cfg *config.Config,
 	sessions *session.Manager,
+	mem schema.MemoryStore,
 	subMgr *agent.SubagentManager,
 	reg AgentRegistry,
 	cb *agent.ContextBuilder,
 ) schema.AgentLooper {
-	return agent.NewAgentLoop(b, p, cfg, sessions, reg.Registry, subMgr, cb)
+	return agent.NewAgentLoop(b, p, cfg, sessions, mem, reg.Registry, subMgr, cb)
 }

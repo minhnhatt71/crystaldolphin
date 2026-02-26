@@ -23,7 +23,7 @@ type MessageBus struct {
 	outbound chan OutboundMessage // agent -> channels
 }
 
-func NewMessageBus(bufSize int) *MessageBus {
+func NewMessageBus(bufSize int) Bus {
 	return &MessageBus{
 		inbound:  make(chan InboundMessage, bufSize),
 		outbound: make(chan OutboundMessage, bufSize),

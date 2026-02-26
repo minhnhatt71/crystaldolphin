@@ -17,7 +17,7 @@ type Params struct {
 // Rules (mirrors Python's _make_provider):
 //   - openai_codex → CodexProvider (OAuth + SSE)
 //   - otherwise    → OpenAIProvider (direct HTTP, handles all OpenAI-compat providers
-//                    including Anthropic native API)
+//     including Anthropic native API)
 func New(p Params) schema.LLMProvider {
 	if p.ProviderName == "openai_codex" ||
 		p.ProviderName == "openai-codex" {
