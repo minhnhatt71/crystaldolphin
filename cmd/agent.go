@@ -47,54 +47,44 @@ func runAgent(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	if !agentLogs {
-		// Suppress slog output by redirecting to discard.
-		// Production code would set a no-op slog handler; keeping simple here.
-	}
-
 	container, err := dependency.New(cfg)
 	if err != nil {
 		return err
 	}
 
-	loop := container.AgentLoop()
-	msgBus := container.MessageBus()
-
 	sessionKey := agentSession
 	channel, chatID := parseSessionKey(sessionKey)
 
 	if agentMessage != "" {
-		// Single message mode.
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		fmt.Fprintf(os.Stderr, "  ↳ thinking...\n")
-		resp := loop.ProcessDirect(ctx, agentMessage, sessionKey, channel, chatID)
-		printResponse(resp)
-		return nil
+		return runSingleMessage(container.AgentLoop(), sessionKey, channel, chatID)
 	}
+	return runInteractive(container.AgentLoop(), container.MessageBus(), channel, chatID)
+}
 
-	// Interactive mode.
+// runSingleMessage sends one message to the agent and prints the response.
+func runSingleMessage(loop agentLooper, sessionKey, channel, chatID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	fmt.Fprintf(os.Stderr, "  ↳ thinking...\n")
+	resp := loop.ProcessDirect(ctx, agentMessage, sessionKey, channel, chatID)
+	printResponse(resp)
+	return nil
+}
+
+// runInteractive starts the REPL loop: reads lines from stdin, sends each to
+// the agent via the bus, and waits for each reply before prompting again.
+func runInteractive(loop agentLooper, msgBus *bus.MessageBus, channel, chatID string) error {
 	fmt.Printf("%s Interactive mode (type 'exit' or Ctrl+C to quit)\n\n", logo)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Handle SIGINT gracefully.
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		fmt.Println("\nGoodbye!")
-		cancel()
-		os.Exit(0)
-	}()
+	listenForSignals(cancel)
 
-	// Start agent loop in background.
 	go func() { _ = loop.Run(ctx) }()
 
 	scanner := bufio.NewScanner(os.Stdin)
-
 	for {
 		fmt.Print("You: ")
 		if !scanner.Scan() {
@@ -109,40 +99,67 @@ func runAgent(_ *cobra.Command, _ []string) error {
 			fmt.Println("Goodbye!")
 			return nil
 		}
+		sendAndWait(ctx, msgBus, channel, chatID, line)
+	}
+}
 
-		// Send to bus; wait for response.
-		doneCh := make(chan struct{})
-		msgBus.Inbound <- bus.InboundMessage{
-			Channel:   channel,
-			SenderID:  "user",
-			ChatID:    chatID,
-			Content:   line,
-			Timestamp: time.Now(),
+// listenForSignals cancels ctx on SIGINT or SIGTERM and exits.
+func listenForSignals(cancel context.CancelFunc) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		switch <-sigChan {
+		case syscall.SIGINT:
+			fmt.Println("\nGoodbye!")
+			fmt.Println("\nReceived SIGINT, shutting down...")
+		case syscall.SIGTERM:
+			fmt.Println("\nGoodbye!")
+			fmt.Println("\nReceived SIGTERM, shutting down...")
 		}
 
-		go func() {
-			defer close(doneCh)
-			for {
-				select {
-				case msg := <-msgBus.Outbound:
-					if msg.Metadata != nil {
-						if prog, _ := msg.Metadata["_progress"].(bool); prog {
-							fmt.Printf("  ↳ %s\n", msg.Content)
-							continue
-						}
-					}
-					if msg.Content != "" {
-						printResponse(msg.Content)
-					}
-					return
-				case <-ctx.Done():
-					return
-				}
-			}
-		}()
+		cancel()
+		os.Exit(0)
+	}()
+}
 
-		<-doneCh
+// sendAndWait pushes a message onto the inbound bus and blocks until the agent
+// publishes the final reply (or ctx is cancelled).
+func sendAndWait(ctx context.Context, msgBus *bus.MessageBus, channel, chatID, content string) {
+	msgBus.Inbound <- bus.InboundMessage{
+		Channel:   channel,
+		SenderID:  "user",
+		ChatID:    chatID,
+		Content:   content,
+		Timestamp: time.Now(),
 	}
+
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		for {
+			select {
+			case msg := <-msgBus.Outbound:
+				if prog, _ := msg.Metadata["_progress"].(bool); prog {
+					fmt.Printf("  ↳ %s\n", msg.Content)
+					continue
+				}
+				if msg.Content != "" {
+					printResponse(msg.Content)
+				}
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	<-doneCh
+}
+
+// agentLooper is the subset of agent.AgentLoop used by this command.
+type agentLooper interface {
+	ProcessDirect(ctx context.Context, content, sessionKey, channel, chatID string) string
+	Run(ctx context.Context) error
 }
 
 func printResponse(text string) {

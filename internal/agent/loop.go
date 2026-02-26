@@ -153,11 +153,10 @@ func (loop *AgentLoop) processMessage(
 		return loop.handleSystemMessage(ctx, msg)
 	}
 
-	preview := msg.Content
-	if len(preview) > 80 {
-		preview = preview[:80] + "..."
-	}
-	slog.Info("Processing message", "channel", msg.Channel, "sender", msg.SenderID, "content", preview)
+	slog.Info("Processing message",
+		"channel", msg.Channel,
+		"sender", msg.SenderID,
+		"content", msg.ContentPreview())
 
 	key := sessionKeyOverride
 	if key == "" {

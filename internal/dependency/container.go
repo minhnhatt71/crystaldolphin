@@ -73,6 +73,12 @@ func New(cfg *config.Config) (*Container, error) {
 	if err := d.Provide(newAgentRegistry); err != nil {
 		return nil, err
 	}
+	if err := d.Provide(newMemoryStore); err != nil {
+		return nil, err
+	}
+	if err := d.Provide(newSkillsLoader); err != nil {
+		return nil, err
+	}
 	if err := d.Provide(newContextBuilder); err != nil {
 		return nil, err
 	}
@@ -210,8 +216,20 @@ func newAgentRegistry(
 	return AgentRegistry{registry}
 }
 
-func newContextBuilder(cfg *config.Config) *agent.ContextBuilder {
-	return agent.NewContextBuilder(cfg.WorkspacePath(), "")
+func newMemoryStore(cfg *config.Config) (*agent.FileMemoryStore, error) {
+	mem, err := agent.NewMemoryStore(cfg.WorkspacePath())
+	if err != nil || mem == nil {
+		return &agent.FileMemoryStore{}, nil
+	}
+	return mem, nil
+}
+
+func newSkillsLoader(cfg *config.Config) *agent.SkillsLoader {
+	return agent.NewSkillsLoader(cfg.WorkspacePath(), "")
+}
+
+func newContextBuilder(cfg *config.Config, mem *agent.FileMemoryStore, sl *agent.SkillsLoader) *agent.ContextBuilder {
+	return agent.NewContextBuilder(cfg.WorkspacePath(), mem, sl)
 }
 
 func newAgentLoop(

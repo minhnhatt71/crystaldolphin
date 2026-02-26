@@ -25,17 +25,15 @@ type ContextBuilder struct {
 var bootstrapFiles = []string{"AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md"}
 
 // NewContextBuilder creates a ContextBuilder for the given workspace.
-// builtinSkillsDir may be "" if there is no embedded skills directory.
-// Memory directory creation errors are silently ignored.
-func NewContextBuilder(workspace, builtinSkillsDir string) *ContextBuilder {
-	mem, _ := NewMemoryStore(workspace)
+// mem and sl are injected by the dependency container.
+func NewContextBuilder(workspace string, mem *FileMemoryStore, sl *SkillsLoader) *ContextBuilder {
 	if mem == nil {
 		mem = &FileMemoryStore{}
 	}
 	return &ContextBuilder{
 		workspace: workspace,
 		memory:    mem,
-		skills:    NewSkillsLoader(workspace, builtinSkillsDir),
+		skills:    sl,
 	}
 }
 

@@ -20,6 +20,15 @@ func (m InboundMessage) SessionKey() string {
 	return m.Channel + ":" + m.ChatID
 }
 
+// ContentPreview returns a short snippet of the message content for logging.
+func (m InboundMessage) ContentPreview() string {
+	preview := m.Content
+	if len(preview) > 80 {
+		preview = preview[:80] + "..."
+	}
+	return preview
+}
+
 // OutboundMessage is a response to be sent back through a channel.
 type OutboundMessage struct {
 	Channel  string         // destination channel name
