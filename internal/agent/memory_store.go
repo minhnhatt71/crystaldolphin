@@ -160,7 +160,7 @@ func (m *FileMemoryStore) Consolidate(ctx context.Context,
 		if len(msg.ToolsUsed) > 0 {
 			toolsStr = " [tools: " + strings.Join(msg.ToolsUsed, ", ") + "]"
 		}
-		lines = append(lines, fmt.Sprintf("[%s] %s%s: %s", ts, upper(msg.Role), toolsStr, content))
+		lines = append(lines, fmt.Sprintf("[%s] %s%s: %s", ts, upper(string(msg.Role)), toolsStr, content))
 	}
 
 	currentMemory := m.ReadLongTerm()

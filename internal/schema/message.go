@@ -17,6 +17,14 @@ type ToolCall struct {
 	Arguments map[string]any
 }
 
+func NewToolCall(id, name string, arguments map[string]any) ToolCall {
+	return ToolCall{
+		ID:        id,
+		Name:      name,
+		Arguments: arguments,
+	}
+}
+
 // ToWireMap serialises a ToolCall into the OpenAI wire-format map.
 // Used by provider implementations when building the JSON request body.
 func (tc ToolCall) ToWireMap() map[string]any {
@@ -31,9 +39,18 @@ func (tc ToolCall) ToWireMap() map[string]any {
 	}
 }
 
+type MessageRole string
+
+const (
+	RoleSystem    MessageRole = "system"
+	RoleUser      MessageRole = "user"
+	RoleAssistant MessageRole = "assistant"
+	RoleTool      MessageRole = "tool"
+)
+
 // Message is one entry in the conversation history.
 //
-// Role is one of: "system", "user", "assistant", "tool".
+// Role is one of: RoleSystem, RoleUser, RoleAssistant, RoleTool.
 //
 // Content holds the message text or content blocks:
 //   - system / tool: plain string
@@ -44,7 +61,7 @@ func (tc ToolCall) ToWireMap() map[string]any {
 // ToolCallID and ToolName are set for tool-result messages.
 // ReasoningContent carries the thinking block from models like DeepSeek-R1.
 type Message struct {
-	Role             string
+	Role             MessageRole
 	Content          any // string | *string | []ContentBlock
 	ToolCalls        []ToolCall
 	ToolCallID       string   // "tool" role only
@@ -55,21 +72,21 @@ type Message struct {
 
 func NewSystemMessage(content any) Message {
 	return Message{
-		Role:    "system",
+		Role:    RoleSystem,
 		Content: content,
 	}
 }
 
 func NewUserMessage(content any) Message {
 	return Message{
-		Role:    "user",
+		Role:    RoleUser,
 		Content: content,
 	}
 }
 
 func NewAssistantMessage(content *string, toolCalls []ToolCall, reasoningContent *string) Message {
 	return Message{
-		Role:             "assistant",
+		Role:             RoleAssistant,
 		Content:          content,
 		ToolCalls:        toolCalls,
 		ReasoningContent: reasoningContent,
@@ -78,7 +95,7 @@ func NewAssistantMessage(content *string, toolCalls []ToolCall, reasoningContent
 
 func NewToolResultMessage(toolCallID, toolName, result string) Message {
 	return Message{
-		Role:       "tool",
+		Role:       RoleTool,
 		Content:    result,
 		ToolCallID: toolCallID,
 		ToolName:   toolName,

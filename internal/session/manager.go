@@ -161,14 +161,14 @@ func (m *Manager) ListSessions() []map[string]any {
 // wireMessage is the on-disk JSON representation of a message.
 // It mirrors the nanobot Python format exactly.
 type wireMessage struct {
-	Role             string           `json:"role"`
-	Content          any              `json:"content"`
-	ToolCalls        []map[string]any `json:"tool_calls,omitempty"`
-	ToolCallID       string           `json:"tool_call_id,omitempty"`
-	Name             string           `json:"name,omitempty"`
-	ReasoningContent string           `json:"reasoning_content,omitempty"`
-	ToolsUsed        []string         `json:"tools_used,omitempty"`
-	Timestamp        string           `json:"timestamp"`
+	Role             schema.MessageRole `json:"role"`
+	Content          any                `json:"content"`
+	ToolCalls        []map[string]any   `json:"tool_calls,omitempty"`
+	ToolCallID       string             `json:"tool_call_id,omitempty"`
+	Name             string             `json:"name,omitempty"`
+	ReasoningContent string             `json:"reasoning_content,omitempty"`
+	ToolsUsed        []string           `json:"tools_used,omitempty"`
+	Timestamp        string             `json:"timestamp"`
 }
 
 // messageToWire converts a typed Message to its on-disk map representation.
@@ -213,7 +213,7 @@ func wireToMessage(data map[string]any) schema.Message {
 	}
 
 	msg := schema.Message{
-		Role:    role,
+		Role:    schema.MessageRole(role),
 		Content: content,
 	}
 

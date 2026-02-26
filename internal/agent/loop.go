@@ -80,7 +80,7 @@ func NewAgentLoop(
 		workspace:     workspace,
 		agentContext:  ctxBuilder,
 		sessions:      sessions,
-		tools:         registry.GetAll(),
+		tools:         registry.AllTools(),
 		subagents:     subagents,
 		consolidating: make(map[string]bool),
 	}
@@ -375,11 +375,11 @@ func (loop *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundM
 
 func (loop *AgentLoop) runLoop(ctx context.Context, conversation schema.Messages, onProgress func(string)) (finalContent string, toolsUsed []string) {
 	for i := 0; i < loop.maxIter; i++ {
-		resp, err := loop.provider.Chat(ctx, conversation, loop.tools.Definitions(), schema.ChatOptions{
-			Model:       loop.model,
-			MaxTokens:   loop.maxTokens,
-			Temperature: loop.temperature,
-		})
+		resp, err := loop.provider.Chat(ctx,
+			conversation,
+			loop.tools.Definitions(),
+			schema.NewChatOptions(loop.model, loop.maxTokens, loop.temperature),
+		)
 
 		if err != nil {
 			slog.Error("LLM error", "err", err)

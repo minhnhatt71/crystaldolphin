@@ -9,6 +9,14 @@ type ChatOptions struct {
 	Temperature float64
 }
 
+func NewChatOptions(model string, maxTokens int, temperature float64) ChatOptions {
+	return ChatOptions{
+		Model:       model,
+		MaxTokens:   maxTokens,
+		Temperature: temperature,
+	}
+}
+
 // ToolCallRequest represents one tool invocation requested by the LLM.
 type ToolCallRequest struct {
 	ID        string

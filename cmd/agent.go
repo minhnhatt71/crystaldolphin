@@ -15,6 +15,7 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
+	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
 var (
@@ -62,7 +63,7 @@ func runAgent(_ *cobra.Command, _ []string) error {
 }
 
 // runSingleMessage sends one message to the agent and prints the response.
-func runSingleMessage(loop agentLooper, sessionKey, channel, chatID string) error {
+func runSingleMessage(loop schema.AgentLooper, sessionKey, channel, chatID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -74,7 +75,7 @@ func runSingleMessage(loop agentLooper, sessionKey, channel, chatID string) erro
 
 // runInteractive starts the REPL loop: reads lines from stdin, sends each to
 // the agent via the bus, and waits for each reply before prompting again.
-func runInteractive(loop agentLooper, msgBus *bus.MessageBus, channel, chatID string) error {
+func runInteractive(loop schema.AgentLooper, msgBus *bus.MessageBus, channel, chatID string) error {
 	fmt.Printf("%s Interactive mode (type 'exit' or Ctrl+C to quit)\n\n", logo)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -154,12 +155,6 @@ func sendAndWait(ctx context.Context, msgBus *bus.MessageBus, channel, chatID, c
 		}
 	}()
 	<-doneCh
-}
-
-// agentLooper is the subset of agent.AgentLoop used by this command.
-type agentLooper interface {
-	ProcessDirect(ctx context.Context, content, sessionKey, channel, chatID string) string
-	Run(ctx context.Context) error
 }
 
 func printResponse(text string) {

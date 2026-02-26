@@ -96,16 +96,16 @@ func (sm *SubagentManager) RunningCount() int {
 
 func (sm *SubagentManager) runSubagent(
 	ctx context.Context,
-	taskID, task, label, originChannel, originChatID string,
+	taskId, task, label, originChannel, originChatId string,
 ) {
-	slog.Info("Subagent starting", "id", taskID, "label", label)
+	slog.Info("Subagent starting", "id", taskId, "label", label)
 
 	finalResult, err := sm.executeTask(ctx, task)
 	if err != nil {
 		finalResult = "Error: " + err.Error()
-		slog.Error("Subagent failed", "id", taskID, "err", err)
+		slog.Error("Subagent failed", "id", taskId, "err", err)
 	} else {
-		slog.Info("Subagent completed", "id", taskID)
+		slog.Info("Subagent completed", "id", taskId)
 	}
 
 	status := "completed successfully"
@@ -113,13 +113,13 @@ func (sm *SubagentManager) runSubagent(
 		status = "failed"
 	}
 
-	sm.announceResult(label, task, finalResult, status, originChannel, originChatID)
+	sm.announceResult(label, task, finalResult, status, originChannel, originChatId)
 }
 
 func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string, error) {
-	ts := sm.reg.GetAll()
+	tls := sm.reg.AllTools()
 
-	messages := schema.NewMessages(
+	msgs := schema.NewMessages(
 		schema.NewSystemMessage(sm.buildSystemPrompt(task)),
 		schema.NewUserMessage(task),
 	)
@@ -127,12 +127,8 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 	const maxIter = 15
 	for i := 0; i < maxIter; i++ {
 		resp, err := sm.provider.Chat(
-			ctx, messages, ts.Definitions(),
-			schema.ChatOptions{
-				Model:       sm.model,
-				MaxTokens:   sm.maxTokens,
-				Temperature: sm.temperature,
-			},
+			ctx, msgs, tls.Definitions(),
+			schema.NewChatOptions(sm.model, sm.maxTokens, sm.temperature),
 		)
 
 		if err != nil {
@@ -153,26 +149,22 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task string) (string
 		// Append assistant turn with tool calls.
 		var toolCalls []schema.ToolCall
 		for _, tc := range resp.ToolCalls {
-			toolCalls = append(toolCalls, schema.ToolCall{
-				ID:        tc.ID,
-				Name:      tc.Name,
-				Arguments: tc.Arguments,
-			})
+			toolCalls = append(toolCalls, schema.NewToolCall(tc.ID, tc.Name, tc.Arguments))
 		}
 
-		messages.AddAssistant(resp.Content, toolCalls, nil)
+		msgs.AddAssistant(resp.Content, toolCalls, nil)
 
 		// Execute each tool.
 		for _, tc := range resp.ToolCalls {
 			slog.Debug("Subagent tool call", "id", taskID(ctx), "tool", tc.Name)
 
-			result, err := ts.Get(tc.Name).Execute(ctx, tc.Arguments)
+			result, err := tls.Get(tc.Name).Execute(ctx, tc.Arguments)
 			if err != nil {
 				result = fmt.Sprintf("Error executing tool %s: %s", tc.Name, err)
 				slog.Error("Subagent tool execution failed", "id", taskID(ctx), "tool", tc.Name, "err", err)
 			}
 
-			messages.AddToolResult(tc.ID, tc.Name, result)
+			msgs.AddToolResult(tc.ID, tc.Name, result)
 		}
 	}
 

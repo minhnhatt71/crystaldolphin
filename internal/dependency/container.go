@@ -21,13 +21,13 @@ import (
 type Container struct {
 	provider schema.LLMProvider
 	msgBus   *bus.MessageBus
-	loop     *agent.AgentLoop
+	loop     schema.AgentLooper
 	cronSvc  *cron.JobManager
 }
 
 func (c *Container) Provider() schema.LLMProvider  { return c.provider }
 func (c *Container) MessageBus() *bus.MessageBus   { return c.msgBus }
-func (c *Container) AgentLoop() *agent.AgentLoop   { return c.loop }
+func (c *Container) AgentLoop() schema.AgentLooper { return c.loop }
 func (c *Container) CronService() *cron.JobManager { return c.cronSvc }
 
 // LLMModel is a named string type so dig can distinguish it from plain
@@ -90,7 +90,7 @@ func New(cfg *config.Config) (*Container, error) {
 	err := d.Invoke(func(
 		provider schema.LLMProvider,
 		msgBus *bus.MessageBus,
-		loop *agent.AgentLoop,
+		loop schema.AgentLooper,
 		cronSvc *cron.JobManager,
 	) {
 		result = &Container{
@@ -240,6 +240,6 @@ func newAgentLoop(
 	subMgr *agent.SubagentManager,
 	reg AgentRegistry,
 	cb *agent.ContextBuilder,
-) *agent.AgentLoop {
+) schema.AgentLooper {
 	return agent.NewAgentLoop(b, p, cfg, sessions, reg.Registry, subMgr, cb)
 }
