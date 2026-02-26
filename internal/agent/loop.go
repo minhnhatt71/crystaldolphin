@@ -88,18 +88,18 @@ func NewAgentLoop(
 
 // Run reads from the inbound bus and processes each message in a goroutine.
 // Blocks until ctx is cancelled.
-func (al *AgentLoop) Run(ctx context.Context) error {
+func (loop *AgentLoop) Run(ctx context.Context) error {
 	// Connect MCP servers once, lazily on first message.
 	slog.Info("Agent loop started")
 
 	for {
 		select {
-		case msg := <-al.bus.Inbound:
-			go al.handleMessage(ctx, msg)
+		case msg := <-loop.bus.Inbound:
+			go loop.handleMessage(ctx, msg)
 		case <-ctx.Done():
 			slog.Info("Agent loop stopping")
-			if al.mcpCleanup != nil {
-				al.mcpCleanup()
+			if loop.mcpCleanup != nil {
+				loop.mcpCleanup()
 			}
 			return ctx.Err()
 		}
@@ -108,11 +108,11 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 
 // ProcessDirect handles a message outside the bus (CLI, cron).
 // Returns the final text response.
-func (al *AgentLoop) ProcessDirect(
+func (loop *AgentLoop) ProcessDirect(
 	ctx context.Context,
 	content, sessionKey, channel, chatID string,
 ) string {
-	al.connectMCPOnce(ctx)
+	loop.connectMCPOnce(ctx)
 	msg := bus.InboundMessage{
 		Channel:   channel,
 		SenderID:  "user",
@@ -120,21 +120,21 @@ func (al *AgentLoop) ProcessDirect(
 		Content:   content,
 		Timestamp: time.Now(),
 	}
-	resp := al.processMessage(ctx, msg, sessionKey)
+	resp := loop.processMessage(ctx, msg, sessionKey)
 	if resp == nil {
 		return ""
 	}
 	return resp.Content
 }
 
-func (al *AgentLoop) handleMessage(ctx context.Context, msg bus.InboundMessage) {
-	al.connectMCPOnce(ctx)
-	resp := al.processMessage(ctx, msg, "")
+func (loop *AgentLoop) handleMessage(ctx context.Context, msg bus.InboundMessage) {
+	loop.connectMCPOnce(ctx)
+	resp := loop.processMessage(ctx, msg, "")
 	if resp != nil {
-		al.bus.Outbound <- *resp
+		loop.bus.Outbound <- *resp
 	} else if msg.Channel == "cli" {
 		// Signal CLI that we're done even when MessageTool was used.
-		al.bus.Outbound <- bus.OutboundMessage{
+		loop.bus.Outbound <- bus.OutboundMessage{
 			Channel:  msg.Channel,
 			ChatID:   msg.ChatID,
 			Content:  "",
@@ -143,14 +143,14 @@ func (al *AgentLoop) handleMessage(ctx context.Context, msg bus.InboundMessage) 
 	}
 }
 
-func (al *AgentLoop) processMessage(
+func (loop *AgentLoop) processMessage(
 	ctx context.Context,
 	msg bus.InboundMessage,
 	sessionKeyOverride string,
 ) *bus.OutboundMessage {
 	// System messages are injected by subagents.
 	if msg.Channel == "system" {
-		return al.handleSystemMessage(ctx, msg)
+		return loop.handleSystemMessage(ctx, msg)
 	}
 
 	preview := msg.Content
@@ -164,118 +164,36 @@ func (al *AgentLoop) processMessage(
 		key = msg.SessionKey()
 	}
 
-	sess := al.sessions.GetOrCreate(key)
+	sess := loop.sessions.GetOrCreate(key)
 
 	// Slash commands.
-	cmd := strings.TrimSpace(strings.ToLower(msg.Content))
-	switch cmd {
-	case "/new":
-		archived := sess.Messages
-		sess.Clear()
-		al.sessions.Save(sess)
-		al.sessions.Invalidate(key)
-
-		go func() {
-			tmp := &session.Session{Key: key, Messages: archived}
-			mem, err := NewMemoryStore(al.workspace)
-			if err != nil {
-				slog.Error("Failed to create memory store for consolidation", "err", err)
-				return
-			}
-
-			err = mem.Consolidate(ctx, tmp, al.sessions, al.provider, al.model, true, al.memoryWindow)
-			if err != nil {
-				slog.Error("Memory consolidation failed", "err", err)
-			}
-		}()
-
-		return &bus.OutboundMessage{
-			Channel:  msg.Channel,
-			ChatID:   msg.ChatID,
-			Content:  "New session started. Memory consolidation in progress.",
-			Metadata: msg.Metadata,
-		}
-	case "/help":
-		return &bus.OutboundMessage{
-			Channel:  msg.Channel,
-			ChatID:   msg.ChatID,
-			Content:  "crystaldolphin commands:\n/new — Start a new conversation\n/help — Show available commands",
-			Metadata: msg.Metadata,
-		}
+	if resp := loop.handleSlashCommand(ctx, msg, sess, key); resp != nil {
+		return resp
 	}
 
-	// Trigger background consolidation when history is long.
-	if sess.Len() > al.memoryWindow {
-		al.consolidatingMu.Lock()
-		if !al.consolidating[key] {
-			al.consolidating[key] = true
-			go func() {
-				defer func() {
-					al.consolidatingMu.Lock()
-					delete(al.consolidating, key)
-					al.consolidatingMu.Unlock()
-				}()
-				mem, err := NewMemoryStore(al.workspace)
-				if err != nil {
-					slog.Error("Failed to create memory store for consolidation", "err", err)
-					return
-				}
-				err = mem.Consolidate(context.Background(), sess, al.sessions, al.provider, al.model, false, al.memoryWindow)
-				if err != nil {
-					slog.Error("Memory consolidation failed", "err", err)
-				}
-			}()
-		}
-		al.consolidatingMu.Unlock()
-	}
+	loop.maybeConsolidateBackground(key, sess)
 
-	// Inject per-turn routing into the context so stateful tools can read it.
-	msgID := ""
-	if v, ok := msg.Metadata["message_id"].(string); ok {
-		msgID = v
-	}
+	ctx, msgSent := loop.injectTurnContext(ctx, msg)
 
-	msgSent := make(chan struct{})
-
-	ctx = tools.WithTurn(ctx, tools.TurnContext{
-		Channel:     msg.Channel,
-		ChatID:      msg.ChatID,
-		MsgID:       msgID,
-		MessageSent: msgSent,
-	})
-
-	history := al.agentContext.BuildMessages(
-		sess.GetHistory(al.memoryWindow),
+	history := loop.agentContext.BuildMessages(
+		sess.GetHistory(loop.memoryWindow),
 		msg.Content,
 		msg.Media,
 		msg.Channel, msg.ChatID,
 	)
 
-	// Progress callback — push intermediate output to the bus.
-	onProgress := func(content string) {
-		meta := map[string]any{"_progress": true}
-		for k, v := range msg.Metadata {
-			meta[k] = v
-		}
-		al.bus.Outbound <- bus.OutboundMessage{
-			Channel:  msg.Channel,
-			ChatID:   msg.ChatID,
-			Content:  content,
-			Metadata: meta,
-		}
-	}
+	onProgress := loop.makeProgressCallback(msg)
 
-	finalContent, toolsUsed := al.runLoop(ctx, history, onProgress)
+	finalContent, toolsUsed := loop.runLoop(ctx, history, onProgress)
 	if finalContent == "" {
 		finalContent = "I've completed processing but have no response to give."
 	}
 
 	slog.Info("Response", "channel", msg.Channel, "sender", msg.SenderID, "length", len(finalContent))
 
-	// Persist to session.
 	sess.AddUser(msg.Content)
 	sess.AddAssistant(finalContent, toolsUsed)
-	al.sessions.Save(sess)
+	loop.sessions.Save(sess)
 
 	// If the message tool sent something, suppress the automatic reply.
 	select {
@@ -292,7 +210,134 @@ func (al *AgentLoop) processMessage(
 	}
 }
 
-func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+// handleSlashCommand checks msg.Content for a known slash command and handles
+// it. Returns non-nil if the command was handled (caller should return early).
+func (loop *AgentLoop) handleSlashCommand(
+	ctx context.Context,
+	msg bus.InboundMessage,
+	sess *session.Session,
+	key string,
+) *bus.OutboundMessage {
+	cmd := strings.TrimSpace(strings.ToLower(msg.Content))
+	switch cmd {
+	case "/new":
+		return loop.handleCmdNew(ctx, msg, sess, key)
+	case "/help":
+		return loop.handleCmdHelp(msg)
+	}
+	return nil
+}
+
+// handleCmdNew clears the current session and triggers background memory
+// consolidation, then replies with a confirmation.
+func (loop *AgentLoop) handleCmdNew(
+	ctx context.Context,
+	msg bus.InboundMessage,
+	sess *session.Session,
+	key string,
+) *bus.OutboundMessage {
+	archived := sess.Messages
+	sess.Clear()
+	loop.sessions.Save(sess)
+	loop.sessions.Invalidate(key)
+
+	go func() {
+		tmp := &session.Session{Key: key, Messages: archived}
+		mem, err := NewMemoryStore(loop.workspace)
+		if err != nil {
+			slog.Error("Failed to create memory store for consolidation", "err", err)
+			return
+		}
+		err = mem.Consolidate(ctx, tmp, loop.sessions, loop.provider, loop.model, true, loop.memoryWindow)
+		if err != nil {
+			slog.Error("Memory consolidation failed", "err", err)
+		}
+	}()
+
+	return &bus.OutboundMessage{
+		Channel:  msg.Channel,
+		ChatID:   msg.ChatID,
+		Content:  "New session started. Memory consolidation in progress.",
+		Metadata: msg.Metadata,
+	}
+}
+
+// handleCmdHelp returns the help text listing available slash commands.
+func (loop *AgentLoop) handleCmdHelp(msg bus.InboundMessage) *bus.OutboundMessage {
+	return &bus.OutboundMessage{
+		Channel:  msg.Channel,
+		ChatID:   msg.ChatID,
+		Content:  "crystaldolphin commands:\n/new — Start a new conversation\n/help — Show available commands",
+		Metadata: msg.Metadata,
+	}
+}
+
+// maybeConsolidateBackground triggers a background memory consolidation when
+// the session history exceeds memoryWindow. Guards against duplicate runs with
+// the per-key consolidating flag.
+func (loop *AgentLoop) maybeConsolidateBackground(key string, sess *session.Session) {
+	if sess.Len() <= loop.memoryWindow {
+		return
+	}
+	loop.consolidatingMu.Lock()
+	defer loop.consolidatingMu.Unlock()
+	if loop.consolidating[key] {
+		return
+	}
+	loop.consolidating[key] = true
+	go func() {
+		defer func() {
+			loop.consolidatingMu.Lock()
+			delete(loop.consolidating, key)
+			loop.consolidatingMu.Unlock()
+		}()
+		mem, err := NewMemoryStore(loop.workspace)
+		if err != nil {
+			slog.Error("Failed to create memory store for consolidation", "err", err)
+			return
+		}
+		err = mem.Consolidate(context.Background(), sess, loop.sessions, loop.provider, loop.model, false, loop.memoryWindow)
+		if err != nil {
+			slog.Error("Memory consolidation failed", "err", err)
+		}
+	}()
+}
+
+// injectTurnContext decorates ctx with per-turn routing information and returns
+// a channel that is closed when the message tool has sent a reply.
+func (loop *AgentLoop) injectTurnContext(ctx context.Context, msg bus.InboundMessage) (context.Context, chan struct{}) {
+	msgID := ""
+	if v, ok := msg.Metadata["message_id"].(string); ok {
+		msgID = v
+	}
+	msgSent := make(chan struct{})
+	ctx = tools.WithTurn(ctx, tools.TurnContext{
+		Channel:     msg.Channel,
+		ChatID:      msg.ChatID,
+		MsgID:       msgID,
+		MessageSent: msgSent,
+	})
+	return ctx, msgSent
+}
+
+// makeProgressCallback returns a function that pushes intermediate output to
+// the outbound bus so clients can display streaming progress.
+func (loop *AgentLoop) makeProgressCallback(msg bus.InboundMessage) func(string) {
+	return func(content string) {
+		meta := map[string]any{"_progress": true}
+		for k, v := range msg.Metadata {
+			meta[k] = v
+		}
+		loop.bus.Outbound <- bus.OutboundMessage{
+			Channel:  msg.Channel,
+			ChatID:   msg.ChatID,
+			Content:  content,
+			Metadata: meta,
+		}
+	}
+}
+
+func (loop *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
 	channel, chatID, _ := strings.Cut(msg.ChatID, ":")
 	if chatID == "" {
 		channel = "cli"
@@ -302,25 +347,25 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	slog.Info("Processing system message", "sender", msg.SenderID)
 
 	key := channel + ":" + chatID
-	sess := al.sessions.GetOrCreate(key)
+	sess := loop.sessions.GetOrCreate(key)
 
 	ctx = tools.WithTurn(ctx, tools.TurnContext{Channel: channel, ChatID: chatID})
-	conversation := al.agentContext.BuildMessages(
-		sess.GetHistory(al.memoryWindow),
+	conversation := loop.agentContext.BuildMessages(
+		sess.GetHistory(loop.memoryWindow),
 		msg.Content,
 		nil,
 		channel,
 		chatID,
 	)
 
-	finalContent, _ := al.runLoop(ctx, conversation, nil)
+	finalContent, _ := loop.runLoop(ctx, conversation, nil)
 	if finalContent == "" {
 		finalContent = "Background task completed."
 	}
 
 	sess.AddUser(fmt.Sprintf("[System: %s] %s", msg.SenderID, msg.Content))
 	sess.AddAssistant(finalContent, nil)
-	al.sessions.Save(sess)
+	loop.sessions.Save(sess)
 
 	return &bus.OutboundMessage{
 		Channel: channel,
@@ -329,12 +374,12 @@ func (al *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundMes
 	}
 }
 
-func (al *AgentLoop) runLoop(ctx context.Context, conversation schema.Messages, onProgress func(string)) (finalContent string, toolsUsed []string) {
-	for i := 0; i < al.maxIter; i++ {
-		resp, err := al.provider.Chat(ctx, conversation, al.tools.Definitions(), schema.ChatOptions{
-			Model:       al.model,
-			MaxTokens:   al.maxTokens,
-			Temperature: al.temperature,
+func (loop *AgentLoop) runLoop(ctx context.Context, conversation schema.Messages, onProgress func(string)) (finalContent string, toolsUsed []string) {
+	for i := 0; i < loop.maxIter; i++ {
+		resp, err := loop.provider.Chat(ctx, conversation, loop.tools.Definitions(), schema.ChatOptions{
+			Model:       loop.model,
+			MaxTokens:   loop.maxTokens,
+			Temperature: loop.temperature,
 		})
 
 		if err != nil {
@@ -376,7 +421,7 @@ func (al *AgentLoop) runLoop(ctx context.Context, conversation schema.Messages, 
 			slog.Info("Tool call", "name", tc.Name, "args", truncate(string(argsJSON), 200))
 
 			var result string
-			if t := al.tools.Get(tc.Name); t != nil {
+			if t := loop.tools.Get(tc.Name); t != nil {
 				result, _ = t.Execute(ctx, tc.Arguments)
 			} else {
 				result = fmt.Sprintf("Error: Tool '%s' not found", tc.Name)
@@ -390,14 +435,14 @@ func (al *AgentLoop) runLoop(ctx context.Context, conversation schema.Messages, 
 }
 
 // connectMCPOnce connects to MCP servers the first time it is called.
-func (al *AgentLoop) connectMCPOnce(ctx context.Context) {
-	al.mcpOnce.Do(func() {
-		if len(al.cfg.Tools.MCPServers) == 0 {
+func (loop *AgentLoop) connectMCPOnce(ctx context.Context) {
+	loop.mcpOnce.Do(func() {
+		if len(loop.cfg.Tools.MCPServers) == 0 {
 			return
 		}
 		// Convert config.MCPServerConfig → tools.MCPServerConfig
-		servers := make(map[string]tools.MCPServerConfig, len(al.cfg.Tools.MCPServers))
-		for name, c := range al.cfg.Tools.MCPServers {
+		servers := make(map[string]tools.MCPServerConfig, len(loop.cfg.Tools.MCPServers))
+		for name, c := range loop.cfg.Tools.MCPServers {
 			servers[name] = tools.MCPServerConfig{
 				Command: c.Command,
 				Args:    c.Args,
@@ -406,7 +451,7 @@ func (al *AgentLoop) connectMCPOnce(ctx context.Context) {
 				Headers: c.Headers,
 			}
 		}
-		al.mcpCleanup = tools.ConnectMCPServers(ctx, servers, &al.tools)
+		loop.mcpCleanup = tools.ConnectMCPServers(ctx, servers, &loop.tools)
 	})
 }
 
