@@ -73,6 +73,9 @@ func New(cfg *config.Config) (*Container, error) {
 	if err := d.Provide(newAgentRegistry); err != nil {
 		return nil, err
 	}
+	if err := d.Provide(newContextBuilder); err != nil {
+		return nil, err
+	}
 	if err := d.Provide(newAgentLoop); err != nil {
 		return nil, err
 	}
@@ -207,6 +210,10 @@ func newAgentRegistry(
 	return AgentRegistry{registry}
 }
 
+func newContextBuilder(cfg *config.Config) *agent.ContextBuilder {
+	return agent.NewContextBuilder(cfg.WorkspacePath(), "")
+}
+
 func newAgentLoop(
 	b *bus.MessageBus,
 	p schema.LLMProvider,
@@ -214,6 +221,7 @@ func newAgentLoop(
 	sessions *session.Manager,
 	subMgr *agent.SubagentManager,
 	reg AgentRegistry,
+	cb *agent.ContextBuilder,
 ) *agent.AgentLoop {
-	return agent.NewAgentLoop(b, p, cfg, sessions, reg.Registry, subMgr, "")
+	return agent.NewAgentLoop(b, p, cfg, sessions, reg.Registry, subMgr, cb)
 }

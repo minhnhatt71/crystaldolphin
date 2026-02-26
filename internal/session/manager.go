@@ -59,9 +59,8 @@ func (m *Manager) GetOrCreate(key string) *Session {
 		}
 	}
 
-	// Store under the canonical key; a concurrent goroutine may have beaten us —
-	// prefer theirs to avoid a duplicate.
 	actual, _ := m.cache.LoadOrStore(key, s)
+
 	return actual.(*Session)
 }
 

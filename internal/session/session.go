@@ -65,6 +65,24 @@ func (s *Session) Len() int {
 	return len(s.Messages.Messages)
 }
 
+// Compact drops messages that have already been consolidated, keeping only the
+// tail of length keepCount. LastConsolidated is reset to 0 because the
+// retained messages are the new beginning of the in-memory slice.
+// Callers must not hold s.mu when calling Compact.
+func (s *Session) Compact(keepCount int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	msgs := s.Messages.Messages
+	if keepCount <= 0 || len(msgs) <= keepCount {
+		return
+	}
+	tail := make([]schema.Message, keepCount)
+	copy(tail, msgs[len(msgs)-keepCount:])
+	s.Messages.Messages = tail
+	s.LastConsolidated = 0
+	s.UpdatedAt = time.Now()
+}
+
 // Clear resets messages and the consolidation pointer.
 func (s *Session) Clear() {
 	s.mu.Lock()

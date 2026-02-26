@@ -14,21 +14,26 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
 )
 
+// SessionSaver is the subset of session.Manager needed by Consolidate.
+type SessionSaver interface {
+	Save(s *session.Session) error
+}
+
 type MemoryStore interface {
 	ReadLongTerm() string
 	WriteLongTerm(content string) error
 	AppendHistory(entry string) error
 	GetMemoryContext() string
-	Consolidate(ctx context.Context, s *session.Session, provider schema.LLMProvider, model string, archiveAll bool, memoryWindow int) error
+	Consolidate(ctx context.Context,
+		s *session.Session, saver SessionSaver, provider schema.LLMProvider,
+		model string, archiveAll bool, memoryWindow int,
+	) error
 }
 
 type FileMemoryStore struct {
 	memoryDir       string
 	memoryFilePath  string
 	historyFilePath string
-}
-
-type Memory struct {
 }
 
 // NewMemoryStore creates a MemoryStore rooted at workspace.
@@ -38,6 +43,7 @@ func NewMemoryStore(workspace string) (*FileMemoryStore, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create memory dir: %w", err)
 	}
+
 	return &FileMemoryStore{
 		memoryDir:       dir,
 		memoryFilePath:  filepath.Join(dir, "MEMORY.md"),
@@ -95,18 +101,21 @@ func (m *FileMemoryStore) GetMemoryContext() string {
 // slice between LastConsolidated and len-keepCount is processed.
 func (m *FileMemoryStore) Consolidate(ctx context.Context,
 	s *session.Session,
+	saver SessionSaver,
 	provider schema.LLMProvider,
 	model string,
 	archiveAll bool,
 	memoryWindow int,
 ) error {
 	s.Lock()
-	msgs := s.Messages.Clone().Messages
+	x := s.Messages.Clone()
 	lastConsolidated := s.LastConsolidated
 	s.Unlock()
 
 	var oldMessages []schema.Message
 	var keepCount int
+
+	msgs := x.Messages
 
 	if archiveAll {
 		oldMessages = msgs
@@ -201,16 +210,23 @@ func (m *FileMemoryStore) Consolidate(ctx context.Context,
 		}
 	}
 
-	// Advance the consolidation pointer.
+	// Advance the consolidation pointer and compact the in-memory slice.
 	// Use len(msgs) from the cloned snapshot taken before the LLM call,
 	// not s.Messages.Messages which may have grown concurrently.
-	s.Lock()
 	if archiveAll {
+		s.Lock()
 		s.LastConsolidated = 0
+		s.Unlock()
 	} else {
-		s.LastConsolidated = len(msgs) - keepCount
+		// Compact drops already-consolidated messages and resets LastConsolidated
+		// to 0 (the tail is now the start of the slice).
+		s.Compact(keepCount)
 	}
-	s.Unlock()
+
+	// Persist the updated pointer immediately so it survives a restart.
+	if err := saver.Save(s); err != nil {
+		slog.Warn("memory consolidation: failed to persist session pointer", "err", err)
+	}
 
 	slog.Info("memory consolidation done", "messages", len(msgs), "last_consolidated", s.LastConsolidated)
 

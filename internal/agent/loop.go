@@ -29,13 +29,12 @@ type AgentLoop struct {
 	provider schema.LLMProvider
 	cfg      *config.Config
 
-	model            string
-	maxIter          int
-	temperature      float64
-	maxTokens        int
-	memoryWindow     int
-	workspace        string
-	builtinSkillsDir string
+	model        string
+	maxIter      int
+	temperature  float64
+	maxTokens    int
+	memoryWindow int
+	workspace    string
 
 	agentContext *ContextBuilder
 	sessions     *session.Manager
@@ -61,7 +60,7 @@ func NewAgentLoop(
 	sessions *session.Manager,
 	registry *tools.Registry,
 	subagents *SubagentManager,
-	builtinSkillsDir string,
+	ctxBuilder *ContextBuilder,
 ) *AgentLoop {
 	workspace := cfg.WorkspacePath()
 	model := cfg.Agents.Defaults.Model
@@ -70,21 +69,20 @@ func NewAgentLoop(
 	}
 
 	return &AgentLoop{
-		bus:              messageBus,
-		provider:         provider,
-		cfg:              cfg,
-		model:            model,
-		maxIter:          cfg.Agents.Defaults.MaxToolIter,
-		temperature:      cfg.Agents.Defaults.Temperature,
-		maxTokens:        cfg.Agents.Defaults.MaxTokens,
-		memoryWindow:     cfg.Agents.Defaults.MemoryWindow,
-		workspace:        workspace,
-		builtinSkillsDir: builtinSkillsDir,
-		agentContext:     NewContextBuilder(workspace, builtinSkillsDir),
-		sessions:         sessions,
-		tools:            registry.GetAll(),
-		subagents:        subagents,
-		consolidating:    make(map[string]bool),
+		bus:           messageBus,
+		provider:      provider,
+		cfg:           cfg,
+		model:         model,
+		maxIter:       cfg.Agents.Defaults.MaxToolIter,
+		temperature:   cfg.Agents.Defaults.Temperature,
+		maxTokens:     cfg.Agents.Defaults.MaxTokens,
+		memoryWindow:  cfg.Agents.Defaults.MemoryWindow,
+		workspace:     workspace,
+		agentContext:  ctxBuilder,
+		sessions:      sessions,
+		tools:         registry.GetAll(),
+		subagents:     subagents,
+		consolidating: make(map[string]bool),
 	}
 }
 
@@ -179,9 +177,15 @@ func (al *AgentLoop) processMessage(
 
 		go func() {
 			tmp := &session.Session{Key: key, Messages: archived}
-			mem, _ := NewMemoryStore(al.workspace)
-			if mem != nil {
-				_ = mem.Consolidate(ctx, tmp, al.provider, al.model, true, al.memoryWindow)
+			mem, err := NewMemoryStore(al.workspace)
+			if err != nil {
+				slog.Error("Failed to create memory store for consolidation", "err", err)
+				return
+			}
+
+			err = mem.Consolidate(ctx, tmp, al.sessions, al.provider, al.model, true, al.memoryWindow)
+			if err != nil {
+				slog.Error("Memory consolidation failed", "err", err)
 			}
 		}()
 
@@ -211,9 +215,14 @@ func (al *AgentLoop) processMessage(
 					delete(al.consolidating, key)
 					al.consolidatingMu.Unlock()
 				}()
-				mem, _ := NewMemoryStore(al.workspace)
-				if mem != nil {
-					_ = mem.Consolidate(context.Background(), sess, al.provider, al.model, false, al.memoryWindow)
+				mem, err := NewMemoryStore(al.workspace)
+				if err != nil {
+					slog.Error("Failed to create memory store for consolidation", "err", err)
+					return
+				}
+				err = mem.Consolidate(context.Background(), sess, al.sessions, al.provider, al.model, false, al.memoryWindow)
+				if err != nil {
+					slog.Error("Memory consolidation failed", "err", err)
 				}
 			}()
 		}
@@ -379,10 +388,6 @@ func (al *AgentLoop) runLoop(ctx context.Context, conversation schema.Messages, 
 
 	return "I've reached the maximum number of tool iterations without a final answer.", toolsUsed
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 // connectMCPOnce connects to MCP servers the first time it is called.
 func (al *AgentLoop) connectMCPOnce(ctx context.Context) {
