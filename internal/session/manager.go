@@ -52,7 +52,7 @@ func (m *Manager) GetOrCreate(key string) *SessionImpl {
 	if s == nil {
 		s = &SessionImpl{
 			Key:       key,
-			Messages:  schema.NewMessages(),
+			Entries:   schema.NewMessages(),
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 			Metadata:  map[string]any{},
@@ -73,7 +73,7 @@ func (m *Manager) Save(s *SessionImpl) error {
 	enc.SetEscapeHTML(false) // preserve non-ASCII, match Python ensure_ascii=False
 
 	s.mu.Lock()
-	msgs := s.Messages.Clone()
+	msgs := s.Entries.Copy()
 	meta := map[string]any{
 		"_type":             "metadata",
 		"key":               s.Key,

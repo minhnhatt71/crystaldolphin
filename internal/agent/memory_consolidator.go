@@ -14,8 +14,8 @@ import (
 
 // Per-session consolidation states used by Schedule.
 const (
-	consolidRunning uint8 = 1 // goroutine is actively consolidating
-	consolidQueued  uint8 = 2 // goroutine is running AND another run is pending
+	running uint8 = 1 // goroutine is actively compacting
+	queued  uint8 = 2 // goroutine is running AND another run is pending
 )
 
 // MemoryCompactor orchestrates memory consolidation. It is responsible for
@@ -30,8 +30,8 @@ type MemoryCompactor struct {
 	memoryWindow int
 
 	// Per-session consolidation state (idle=absent, running=1, queued=2).
-	consolidating map[string]uint8
-	mu            sync.Mutex
+	compacting map[string]uint8
+	mu         sync.Mutex
 }
 
 // NewCompactor returns a MemoryCompactor. The save_memory tool is resolved
@@ -42,57 +42,56 @@ func NewCompactor(store schema.MemoryStore, saver schema.SessionSaver, provider 
 		Build()
 
 	return &MemoryCompactor{
-		saver:         saver,
-		provider:      provider,
-		model:         model,
-		memoryStore:   store,
-		reg:           registry,
-		memoryWindow:  memoryWindow,
-		consolidating: make(map[string]uint8),
+		saver:        saver,
+		provider:     provider,
+		model:        model,
+		memoryStore:  store,
+		reg:          registry,
+		memoryWindow: memoryWindow,
+		compacting:   make(map[string]uint8),
 	}
 }
 
 // Schedule is the single entry point for all consolidation work.
 // It enforces at most one active goroutine per key with one pending slot.
-//
-// State machine per key:
-//
-//	absent          → consolidRunning  launch goroutine
-//	consolidRunning → consolidQueued   mark pending, goroutine will re-run
-//	consolidQueued  → consolidQueued   already queued, nothing to do
 func (c *MemoryCompactor) Schedule(key string, sess schema.Session, archiveAll bool) {
+	if sess.Messages().Len() <= c.memoryWindow {
+		return
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	switch c.consolidating[key] {
-	case consolidRunning:
-		c.consolidating[key] = consolidQueued
+	switch c.compacting[key] {
+	case running:
+		c.compacting[key] = queued
 		return
-	case consolidQueued:
+	case queued:
 		return
 	}
 
 	// idle → launch goroutine
-	c.consolidating[key] = consolidRunning
-	go func() {
-		for {
-			err := c.Compact(context.Background(), sess, archiveAll)
+	c.compacting[key] = running
+	go c.performOneAtAtime(key, sess, archiveAll)
+}
 
-			if err != nil {
-				slog.Error("Memory consolidation failed", "err", err)
-			}
+func (c *MemoryCompactor) performOneAtAtime(key string, sess schema.Session, archiveAll bool) {
+	for {
+		err := c.Compact(context.Background(), sess, archiveAll)
 
-			c.mu.Lock()
-			if c.consolidating[key] == consolidQueued {
-				c.consolidating[key] = consolidRunning
-				c.mu.Unlock()
-				continue
-			}
-			delete(c.consolidating, key)
-			c.mu.Unlock()
-			return
+		if err != nil {
+			slog.Error("Memory consolidation failed", "err", err)
 		}
-	}()
+
+		c.mu.Lock()
+		if c.compacting[key] == queued {
+			c.compacting[key] = running
+			c.mu.Unlock()
+			continue
+		}
+		delete(c.compacting, key)
+		c.mu.Unlock()
+		return
+	}
 }
 
 // Compact summarises old session messages into MEMORY.md and HISTORY.md
@@ -110,7 +109,7 @@ func (c *MemoryCompactor) Compact(ctx context.Context, s schema.Session, archive
 		return nil
 	}
 
-	if err := c.summarizeAndSave(ctx, msgs); err != nil {
+	if err := c.compactAndSave(ctx, msgs); err != nil {
 		return err
 	}
 
@@ -125,9 +124,9 @@ func (c *MemoryCompactor) Compact(ctx context.Context, s schema.Session, archive
 	return nil
 }
 
-// summarizeAndSave sends oldMsgs to the LLM and invokes SaveMemoryTool.Execute
+// compactAndSave sends oldMsgs to the LLM and invokes SaveMemoryTool.Execute
 // with the returned arguments. Returns an error when the LLM call fails.
-func (c *MemoryCompactor) summarizeAndSave(ctx context.Context, old schema.Messages) error {
+func (c *MemoryCompactor) compactAndSave(ctx context.Context, old schema.Messages) error {
 	current := c.memoryStore.ReadLongTerm()
 	if current == "" {
 		current = "(empty)"

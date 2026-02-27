@@ -6,6 +6,9 @@ import "context"
 // MemoryStore.Consolidate. Defined here to avoid an import cycle
 // (session imports schema, so schema cannot import session).
 type Session interface {
+	// Messages returns the full message history of the session, including all tool calls.
+	Messages() Messages
+
 	// ConsolidatedMessages returns the slice of messages eligible for consolidation and
 	// true, or an empty Messages and false when there is nothing to do.
 	// Must only be called from the consolidation goroutine (never concurrently).
@@ -39,14 +42,4 @@ type MemoryStore interface {
 type MemoryCompactor interface {
 	Compact(ctx context.Context, s Session, archiveAll bool) error
 	Schedule(key string, sess Session, archiveAll bool)
-}
-
-// Memory is the result of a consolidation selection: the messages to process.
-type Memory struct {
-	Messages []Message
-}
-
-// NewMemory constructs a consolidation result.
-func NewMemory(msgs []Message) Memory {
-	return Memory{Messages: msgs}
 }

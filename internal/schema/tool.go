@@ -18,6 +18,15 @@ type Tool interface {
 	Execute(ctx context.Context, params map[string]any) (string, error)
 }
 
+type ToolRegistry interface {
+	// Get returns the tool with the given name, or nil if not found.
+	Get(name string) Tool
+	// Add registers a new tool, replacing any existing tool with the same name.
+	Add(t Tool) Tool
+	// Definitions returns all tool definitions in OpenAI function-calling format.
+	Definitions() []map[string]any
+}
+
 // ToolRegistrar is implemented by any collection that accepts Tool registrations
 // at runtime. Defined here so packages like internal/mcp can register discovered
 // tools without importing internal/tools.

@@ -18,13 +18,11 @@ import (
 // Each subagent has its own isolated tool registry (no message/spawn tools).
 // Mirrors nanobot's Python SubagentManager.
 type SubagentManager struct {
-	provider    schema.LLMProvider
-	workspace   string
-	bus         bus.Bus
-	model       string
-	temperature float64
-	maxTokens   int
-	reg         *tools.Registry
+	provider  schema.LLMProvider
+	workspace string
+	bus       bus.Bus
+	settings  schema.AgentSettings
+	reg       *tools.Registry
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
@@ -35,22 +33,16 @@ type SubagentManager struct {
 // A fresh ToolList is built from it on every execution, so runs are isolated.
 func NewSubagentManager(
 	provider schema.LLMProvider,
-	workspace string,
-	msgBus bus.Bus,
-	model string,
-	temperature float64,
-	maxTokens int,
-	reg *tools.Registry,
+	messages bus.Bus,
+	settings schema.AgentSettings,
+	registry *tools.Registry,
 ) *SubagentManager {
 	return &SubagentManager{
-		provider:    provider,
-		workspace:   workspace,
-		bus:         msgBus,
-		model:       model,
-		temperature: temperature,
-		maxTokens:   maxTokens,
-		reg:         reg,
-		running:     make(map[string]context.CancelFunc),
+		provider: provider,
+		bus:      messages,
+		settings: settings,
+		reg:      registry,
+		running:  make(map[string]context.CancelFunc),
 	}
 }
 
@@ -122,9 +114,10 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task, taskId string)
 		schema.NewUserMessage(task),
 	)
 
-	const maxIter = 15
+	maxIter := sm.settings.MaxIter
+
 	for i := 0; i < maxIter; i++ {
-		options := schema.NewChatOptions(sm.model, sm.maxTokens, sm.temperature)
+		options := schema.NewChatOptions(sm.settings.Model, sm.settings.MaxTokens, sm.settings.Temperature)
 		resp, err := sm.provider.Chat(ctx, msgs, tls.Definitions(), options)
 		if err != nil {
 			return "", err

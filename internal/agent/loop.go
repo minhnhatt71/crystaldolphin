@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/mcp"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
@@ -24,13 +23,7 @@ import (
 type AgentLoop struct {
 	bus      bus.Bus
 	provider schema.LLMProvider
-	cfg      *config.Config
-
-	model        string
-	maxIter      int
-	temperature  float64
-	maxTokens    int
-	memoryWindow int
+	settings schema.AgentSettings
 
 	agentContext *AgentContextBuilder
 	sessions     *session.Manager
@@ -45,35 +38,26 @@ type AgentLoop struct {
 // NewAgentLoop creates an AgentLoop with the supplied tool registry builder and
 // subagent manager. builtinSkillsDir may be "" if there are no embedded skills.
 func NewAgentLoop(
-	messageBus bus.Bus,
+	bus bus.Bus,
 	provider schema.LLMProvider,
-	cfg *config.Config,
+	settings schema.AgentSettings,
+	mcpManager *mcp.Manager,
 	sessions *session.Manager,
 	compactor schema.MemoryCompactor,
 	registry *tools.Registry,
 	subagents *SubagentManager,
 	ctxBuilder *AgentContextBuilder,
 ) *AgentLoop {
-	model := cfg.Agents.Defaults.Model
-	if model == "" {
-		model = provider.DefaultModel()
-	}
-
 	return &AgentLoop{
-		bus:          messageBus,
+		bus:          bus,
 		provider:     provider,
-		cfg:          cfg,
-		model:        model,
-		maxIter:      cfg.Agents.Defaults.MaxToolIter,
-		temperature:  cfg.Agents.Defaults.Temperature,
-		maxTokens:    cfg.Agents.Defaults.MaxTokens,
-		memoryWindow: cfg.Agents.Defaults.MemoryWindow,
+		settings:     settings,
+		mcpManager:   mcpManager,
 		agentContext: ctxBuilder,
 		sessions:     sessions,
 		compactor:    compactor,
 		tools:        registry.GetAll(),
 		subagents:    subagents,
-		mcpManager:   mcp.NewManager(),
 	}
 }
 
@@ -100,7 +84,7 @@ func (loop *AgentLoop) Run(ctx context.Context) error {
 // ProcessDirect handles a message outside the bus (CLI, cron).
 // Returns the final text response.
 func (loop *AgentLoop) ProcessDirect(ctx context.Context, content, sessKey, channel, chatID string) string {
-	loop.mcpManager.ConnectOnce(ctx, loop.cfg.Tools.MCPServers, &loop.tools)
+	loop.mcpManager.ConnectOnce(ctx, &loop.tools)
 
 	msg := bus.NewInboundMessage(channel, "user", chatID, content)
 	resp := loop.processMessage(ctx, msg, sessKey)
@@ -112,7 +96,7 @@ func (loop *AgentLoop) ProcessDirect(ctx context.Context, content, sessKey, chan
 }
 
 func (loop *AgentLoop) handleMessage(ctx context.Context, msg bus.InboundMessage) {
-	loop.mcpManager.ConnectOnce(ctx, loop.cfg.Tools.MCPServers, &loop.tools)
+	loop.mcpManager.ConnectOnce(ctx, &loop.tools)
 	resp := loop.processMessage(ctx, msg, "")
 
 	if resp != nil {
@@ -149,19 +133,19 @@ func (loop *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessag
 		return resp
 	}
 
-	loop.maybeConsolidateBackground(key, ses)
+	loop.compactor.Schedule(key, ses, false)
 
 	ctx, msgSentChan := loop.withTurnContext(ctx, msg)
 
-	history := loop.agentContext.BuildMessages(
-		ses.History(loop.memoryWindow),
+	conversation := loop.agentContext.BuildMessages(
+		ses.History(loop.settings.MemoryWindow),
 		msg.Content(),
 		msg.Media(),
 		msg.Channel(),
 		msg.ChatId(),
 	)
 
-	final, toolsUsed := loop.runLoop(ctx, history, loop.makeProgressCallback(msg))
+	final, toolsUsed := loop.runLoop(ctx, conversation, loop.makeProgressCallback(msg))
 	if final == "" {
 		final = "I've completed processing but have no response to give."
 	}
@@ -204,7 +188,7 @@ func (loop *AgentLoop) handleSlashCommand(
 // handleCmdNew clears the current session and triggers background memory
 // consolidation, then replies with a confirmation.
 func (loop *AgentLoop) handleCmdNew(msg bus.InboundMessage, sess *session.SessionImpl, key string) *bus.OutboundMessage {
-	archived := sess.Messages
+	archived := sess.Messages()
 	sess.Clear()
 	loop.sessions.Save(sess)
 	loop.sessions.Invalidate(key)
@@ -223,15 +207,6 @@ func (loop *AgentLoop) handleCmdHelp(msg bus.InboundMessage) *bus.OutboundMessag
 	out := bus.NewOutboundMessage(msg.Channel(), msg.ChatId(), "crystaldolphin commands:\n/new — Start a new conversation\n/help — Show available commands")
 	out.SetMetadata(msg.Metadata())
 	return &out
-}
-
-// maybeConsolidateBackground triggers consolidation when the session history
-// exceeds memoryWindow.
-func (loop *AgentLoop) maybeConsolidateBackground(key string, sess *session.SessionImpl) {
-	if sess.Len() <= loop.memoryWindow {
-		return
-	}
-	loop.compactor.Schedule(key, sess, false)
 }
 
 // withTurnContext decorates ctx with per-turn routing information and returns
@@ -279,7 +254,7 @@ func (loop *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundM
 
 	ctx = tools.WithTurn(ctx, tools.TurnContext{Channel: channel, ChatID: chatId})
 	conversation := loop.agentContext.BuildMessages(
-		sess.History(loop.memoryWindow),
+		sess.History(loop.settings.MemoryWindow),
 		msg.Content(),
 		nil,
 		channel,
@@ -300,11 +275,11 @@ func (loop *AgentLoop) handleSystemMessage(ctx context.Context, msg bus.InboundM
 }
 
 func (loop *AgentLoop) runLoop(ctx context.Context, conversation schema.Messages, onProgress func(string)) (finalContent string, toolsUsed []string) {
-	for i := 0; i < loop.maxIter; i++ {
+	for i := 0; i < loop.settings.MaxIter; i++ {
 		resp, err := loop.provider.Chat(ctx,
 			conversation,
 			loop.tools.Definitions(),
-			schema.NewChatOptions(loop.model, loop.maxTokens, loop.temperature),
+			schema.NewChatOptions(loop.settings.Model, loop.settings.MaxTokens, loop.settings.Temperature),
 		)
 
 		if err != nil {

@@ -73,8 +73,17 @@ func (mh *Messages) Append(other Messages) {
 	mh.Messages = append(mh.Messages, other.Messages...)
 }
 
-// Clone returns a deep copy of mh with an independent backing slice.
-func (mh *Messages) Clone() Messages {
+// Len returns the number of messages in mh, treating nil as empty.
+func (mh Messages) Len() int {
+	if mh.Messages == nil {
+		return 0
+	}
+
+	return len(mh.Messages)
+}
+
+// Copy returns a deep copy of mh with an independent backing slice.
+func (mh *Messages) Copy() Messages {
 	cloned := make([]Message, len(mh.Messages))
 	copy(cloned, mh.Messages)
 	return Messages{Messages: cloned}

@@ -14,7 +14,7 @@ type SessionKey string
 // SessionImpl holds one conversation's messages and metadata.
 type SessionImpl struct {
 	Key              string
-	Messages         schema.Messages
+	Entries          schema.Messages
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 	Metadata         map[string]any
@@ -28,7 +28,7 @@ type SessionImpl struct {
 func newSession(key string, messages schema.Messages, createdAt, updatedAt time.Time, meta map[string]any, lastConsolidated int) schema.Session {
 	return &SessionImpl{
 		Key:              key,
-		Messages:         messages,
+		Entries:          messages,
 		CreatedAt:        createdAt,
 		UpdatedAt:        updatedAt,
 		Metadata:         meta,
@@ -40,16 +40,23 @@ func newSession(key string, messages schema.Messages, createdAt, updatedAt time.
 // and no consolidation history. Used for /new consolidation of the old snapshot.
 func NewArchivedSession(key string, messages schema.Messages) schema.Session {
 	return &SessionImpl{
-		Key:      key,
-		Messages: messages,
+		Key:     key,
+		Entries: messages,
 	}
+}
+
+// Messages returns the full message history of the session, including all tool calls.
+func (s *SessionImpl) Messages() schema.Messages {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Entries
 }
 
 // AddUser appends a user message to the session.
 func (s *SessionImpl) AddUser(content string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Messages.AddUser(content)
+	s.Entries.AddUser(content)
 	s.UpdatedAt = time.Now()
 }
 
@@ -65,7 +72,7 @@ func (s *SessionImpl) AddAssistant(content string, toolsUsed []string) {
 		ToolsUsed: toolsUsed,
 	}
 
-	s.Messages.Add(msg)
+	s.Entries.Add(msg)
 	s.UpdatedAt = time.Now()
 }
 
@@ -74,7 +81,7 @@ func (s *SessionImpl) History(maxMessages int) schema.Messages {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	msgs := s.Messages.Messages
+	msgs := s.Entries.Messages
 	if maxMessages > 0 && len(msgs) > maxMessages {
 		msgs = msgs[len(msgs)-maxMessages:]
 	}
@@ -88,14 +95,14 @@ func (s *SessionImpl) History(maxMessages int) schema.Messages {
 func (s *SessionImpl) Len() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return len(s.Messages.Messages)
+	return len(s.Entries.Messages)
 }
 
 // Clear resets messages and the consolidation pointer.
 func (s *SessionImpl) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.Messages = schema.NewMessages()
+	s.Entries = schema.NewMessages()
 	s.lastConsolidated = 0
 	s.UpdatedAt = time.Now()
 }
@@ -113,15 +120,15 @@ func (s *SessionImpl) Compact(archive bool, keepCount int) {
 	if archive {
 		s.lastConsolidated = 0
 		s.UpdatedAt = time.Now()
-		s.Messages = schema.NewMessages()
+		s.Entries = schema.NewMessages()
 	} else {
-		msgs := s.Messages.Messages
+		msgs := s.Entries.Messages
 		if keepCount <= 0 || len(msgs) <= keepCount {
 			return
 		}
 		tail := make([]schema.Message, keepCount)
 		copy(tail, msgs[len(msgs)-keepCount:])
-		s.Messages.Messages = tail
+		s.Entries.Messages = tail
 		s.lastConsolidated = 0
 		s.UpdatedAt = time.Now()
 	}
@@ -131,7 +138,7 @@ func (s *SessionImpl) Compact(archive bool, keepCount int) {
 // true, or an empty Messages and false when there is nothing to do.
 // Must only be called from the consolidation goroutine (never concurrently).
 func (s *SessionImpl) ConsolidatedMessages(archive bool, memWindow, keepCount int) (schema.Messages, bool) {
-	msgs := s.Messages.Messages
+	msgs := s.Entries.Messages
 	lastConsolidated := s.lastConsolidated
 
 	if archive {

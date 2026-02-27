@@ -12,21 +12,22 @@ import (
 
 // Manager owns the lifecycle of all MCP server connections for a single agent.
 type Manager struct {
+	servers map[string]toolcfg.MCPServerConfig
 	clients []*client
 	once    sync.Once
 }
 
-// NewManager returns an empty Manager ready to connect servers.
-func NewManager() *Manager {
-	return &Manager{}
+// NewManager returns a Manager configured with the given MCP servers.
+func NewManager(servers map[string]toolcfg.MCPServerConfig) *Manager {
+	return &Manager{servers: servers}
 }
 
 // ConnectOnce connects to all configured MCP servers and registers their
 // discovered tools into ts. It is safe to call concurrently; connection happens
 // at most once. Failed servers are logged and skipped (non-fatal).
-func (m *Manager) ConnectOnce(ctx context.Context, servers map[string]toolcfg.MCPServerConfig, ts schema.ToolRegistrar) {
+func (m *Manager) ConnectOnce(ctx context.Context, ts schema.ToolRegistrar) {
 	m.once.Do(func() {
-		for name, cfg := range servers {
+		for name, cfg := range m.servers {
 			c := newClient(name, toServerConfig(cfg))
 			if err := c.connect(ctx); err != nil {
 				slog.Error("MCP server connect failed", "server", name, "err", err)

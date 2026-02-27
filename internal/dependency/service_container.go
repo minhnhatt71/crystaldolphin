@@ -9,6 +9,7 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
+	"github.com/crystaldolphin/crystaldolphin/internal/mcp"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
@@ -82,6 +83,9 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 		return nil, err
 	}
 	if err := d.Provide(newContextBuilder); err != nil {
+		return nil, err
+	}
+	if err := d.Provide(newMCPManager); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newAgentLoop); err != nil {
@@ -180,14 +184,18 @@ func newSubAgentToolRegistry(cfg *config.Config) SubagentRegistry {
 	return SubagentRegistry{registry}
 }
 
-func newSubagentManager(p schema.LLMProvider, b bus.Bus, cfg *config.Config, m LLMModel, reg SubagentRegistry) *agent.SubagentManager {
-	return agent.NewSubagentManager(
-		p, cfg.WorkspacePath(), b,
-		string(m),
+func newSubagentManager(provider schema.LLMProvider, bus bus.Bus, cfg *config.Config, model LLMModel, reg SubagentRegistry) *agent.SubagentManager {
+	modelKey := string(model)
+
+	settings := schema.NewAgentSettings(
+		modelKey,
+		15,
 		cfg.Agents.Defaults.Temperature,
 		cfg.Agents.Defaults.MaxTokens,
-		reg.Registry,
+		0,
 	)
+
+	return agent.NewSubagentManager(provider, bus, settings, reg.Registry)
 }
 
 func newAgentRegistry(
@@ -240,10 +248,16 @@ func newContextBuilder(cfg *config.Config, mem schema.MemoryStore, sl schema.Ski
 	return agent.NewContextBuilder(cfg.WorkspacePath(), mem, sl)
 }
 
+func newMCPManager(cfg *config.Config) *mcp.Manager {
+	return mcp.NewManager(cfg.Tools.MCPServers)
+}
+
 func newAgentLoop(
 	b bus.Bus,
 	p schema.LLMProvider,
 	cfg *config.Config,
+	m LLMModel,
+	mcpMgr *mcp.Manager,
 	sessions *session.Manager,
 	mem schema.MemoryStore,
 	consolidator schema.MemoryCompactor,
@@ -251,5 +265,13 @@ func newAgentLoop(
 	reg AgentRegistry,
 	cb *agent.AgentContextBuilder,
 ) schema.AgentLooper {
-	return agent.NewAgentLoop(b, p, cfg, sessions, consolidator, reg.Registry, subMgr, cb)
+	settings := schema.NewAgentSettings(
+		string(m),
+		cfg.Agents.Defaults.MaxToolIter,
+		cfg.Agents.Defaults.Temperature,
+		cfg.Agents.Defaults.MaxTokens,
+		cfg.Agents.Defaults.MemoryWindow,
+	)
+
+	return agent.NewAgentLoop(b, p, settings, mcpMgr, sessions, consolidator, reg.Registry, subMgr, cb)
 }

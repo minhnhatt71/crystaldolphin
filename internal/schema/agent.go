@@ -3,20 +3,20 @@ package schema
 import "context"
 
 type AgentSettings struct {
-	model        string
-	maxIter      int
-	temperature  float64
-	maxTokens    int
-	memoryWindow int
+	Model        string
+	MaxIter      int
+	Temperature  float64
+	MaxTokens    int
+	MemoryWindow int
 }
 
 func NewAgentSettings(model string, maxIter int, temperature float64, maxTokens int, memoryWindow int) AgentSettings {
 	return AgentSettings{
-		model:        model,
-		maxIter:      maxIter,
-		temperature:  temperature,
-		maxTokens:    maxTokens,
-		memoryWindow: memoryWindow,
+		Model:        model,
+		MaxIter:      maxIter,
+		Temperature:  temperature,
+		MaxTokens:    maxTokens,
+		MemoryWindow: memoryWindow,
 	}
 }
 
