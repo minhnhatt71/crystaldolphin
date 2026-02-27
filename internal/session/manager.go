@@ -43,14 +43,14 @@ func NewManager(workspace string) (*Manager, error) {
 
 // GetOrCreate returns the cached session for key, loading from disk if needed,
 // or creating an empty new one.
-func (m *Manager) GetOrCreate(key string) *SessionImpl {
+func (m *Manager) GetOrCreate(key string) *ChannelSessionImpl {
 	if v, ok := m.cache.Load(key); ok {
-		return v.(*SessionImpl)
+		return v.(*ChannelSessionImpl)
 	}
 
 	s := m.load(key)
 	if s == nil {
-		s = &SessionImpl{
+		s = &ChannelSessionImpl{
 			Key:       key,
 			Entries:   schema.NewMessages(),
 			CreatedAt: time.Now(),
@@ -61,11 +61,11 @@ func (m *Manager) GetOrCreate(key string) *SessionImpl {
 
 	actual, _ := m.cache.LoadOrStore(key, s)
 
-	return actual.(*SessionImpl)
+	return actual.(*ChannelSessionImpl)
 }
 
 // Save writes the session to disk and updates the cache.
-func (m *Manager) Save(s *SessionImpl) error {
+func (m *Manager) Save(s *ChannelSessionImpl) error {
 	path := m.sessionPath(s.Key)
 
 	var buf bytes.Buffer
@@ -105,8 +105,8 @@ func (m *Manager) Save(s *SessionImpl) error {
 
 // SaveConsolidated implements schema.SessionSaver for use by memory consolidation.
 // It casts the ConsolidatableSession back to *Session and delegates to Save.
-func (m *Manager) SaveConsolidated(s schema.Session) error {
-	sess, ok := s.(*SessionImpl)
+func (m *Manager) SaveConsolidated(s schema.ChannelSession) error {
+	sess, ok := s.(*ChannelSessionImpl)
 	if !ok {
 		return fmt.Errorf("session.Manager.SaveConsolidated: unexpected type %T", s)
 	}
@@ -294,7 +294,7 @@ func safeFilename(name string) string {
 }
 
 // load reads a session from disk, migrating from the legacy path if needed.
-func (m *Manager) load(key string) schema.Session {
+func (m *Manager) load(key string) schema.ChannelSession {
 	path := m.sessionPath(key)
 
 	f, err := os.Open(path)

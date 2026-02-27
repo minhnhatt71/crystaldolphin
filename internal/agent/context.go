@@ -13,8 +13,8 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
-// AgentContextBuilder assembles system prompts and message lists for the LLM.
-type AgentContextBuilder struct {
+// PromptContext assembles system prompts and message lists for the LLM.
+type PromptContext struct {
 	workspace string
 	memory    schema.MemoryStore
 	skills    schema.SkillLoader
@@ -25,12 +25,12 @@ var bootstrapFiles = []string{"AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "ID
 
 // NewContextBuilder creates a ContextBuilder for the given workspace.
 // mem and sl are injected by the dependency container.
-func NewContextBuilder(workspace string, memory schema.MemoryStore, skillsLoader schema.SkillLoader) *AgentContextBuilder {
+func NewContextBuilder(workspace string, memory schema.MemoryStore, skillsLoader schema.SkillLoader) *PromptContext {
 	if memory == nil {
 		memory = &FileMemoryStore{}
 	}
 
-	return &AgentContextBuilder{
+	return &PromptContext{
 		workspace: workspace,
 		memory:    memory,
 		skills:    skillsLoader,
@@ -39,28 +39,28 @@ func NewContextBuilder(workspace string, memory schema.MemoryStore, skillsLoader
 
 // BuildSystemPrompt assembles the full system prompt: identity + bootstrap
 // files + memory + always-skills + skills summary.
-func (cb *AgentContextBuilder) BuildSystemPrompt() string {
+func (pb *PromptContext) BuildSystemPrompt() string {
 	var parts []string
 
-	parts = append(parts, cb.buildIdentity())
+	parts = append(parts, pb.buildIdentity())
 
-	if bootstrap := cb.loadMarkdownFiles(); bootstrap != "" {
+	if bootstrap := pb.loadMarkdownFiles(); bootstrap != "" {
 		parts = append(parts, bootstrap)
 	}
 
-	if mem := cb.memory.GetMemoryContext(); mem != "" {
+	if mem := pb.memory.GetMemoryContext(); mem != "" {
 		parts = append(parts, "# Memory\n\n"+mem)
 	}
 
 	// Always-loaded skills (full content).
-	if alwaysNames := cb.skills.GetAlwaysSkills(); len(alwaysNames) > 0 {
-		if content := cb.skills.LoadSkillsForContext(alwaysNames); content != "" {
+	if alwaysNames := pb.skills.GetAlwaysSkills(); len(alwaysNames) > 0 {
+		if content := pb.skills.LoadSkillsForContext(alwaysNames); content != "" {
 			parts = append(parts, "# Active Skills\n\n"+content)
 		}
 	}
 
 	// Skills directory summary (progressive loading).
-	if summary := cb.skills.BuildSkillsSummary(); summary != "" {
+	if summary := pb.skills.BuildSkillsSummary(); summary != "" {
 		parts = append(parts, `# Skills
 
 The following skills extend your capabilities. To use a skill, read its SKILL.md file using the read_file tool.
@@ -73,13 +73,13 @@ Skills with available="false" need dependencies installed first - you can try in
 }
 
 // buildIdentity returns the core identity section of the system prompt.
-func (cb *AgentContextBuilder) buildIdentity() string {
+func (pb *PromptContext) buildIdentity() string {
 	now := time.Now().Format("2006-01-02 15:04 (Monday)")
 	tz, _ := time.Now().Zone()
 	if tz == "" {
 		tz = "UTC"
 	}
-	wsExpanded := expandHome(cb.workspace)
+	wsExpanded := expandHome(pb.workspace)
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
 	osName := goos
@@ -121,10 +121,10 @@ To recall past events, grep %s/memory/HISTORY.md`,
 }
 
 // loadMarkdownFiles reads all bootstrap markdown files from the workspace.
-func (cb *AgentContextBuilder) loadMarkdownFiles() string {
+func (pb *PromptContext) loadMarkdownFiles() string {
 	var parts []string
 	for _, name := range bootstrapFiles {
-		p := filepath.Join(cb.workspace, name)
+		p := filepath.Join(pb.workspace, name)
 		data, err := os.ReadFile(p)
 		if err != nil {
 			continue
@@ -136,27 +136,27 @@ func (cb *AgentContextBuilder) loadMarkdownFiles() string {
 
 // BuildMessages builds the complete message list for an LLM call.
 // Mirrors Python ContextBuilder.build_messages().
-func (cb *AgentContextBuilder) BuildMessages(
+func (pb *PromptContext) BuildMessages(
 	history schema.Messages,
 	currentMessage string,
 	media []string,
 	channel,
 	chatID string,
 ) schema.Messages {
-	systemPrompt := cb.BuildSystemPrompt()
+	systemPrompt := pb.BuildSystemPrompt()
 	if channel != "" && chatID != "" {
 		systemPrompt += fmt.Sprintf("\n\n## Current Session\nChannel: %s\nChat ID: %s", channel, chatID)
 	}
 
 	messages := schema.NewMessages(schema.NewSystemMessage(systemPrompt))
 	messages.Append(history)
-	messages.AddUser(cb.buildUserContent(currentMessage, media))
+	messages.AddUser(pb.buildUserContent(currentMessage, media))
 
 	return messages
 }
 
 // buildUserContent builds user content, embedding base64 images when media is provided.
-func (cb *AgentContextBuilder) buildUserContent(text string, media []string) any {
+func (pb *PromptContext) buildUserContent(text string, media []string) any {
 	if len(media) == 0 {
 		return text
 	}

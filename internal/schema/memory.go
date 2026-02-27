@@ -2,10 +2,10 @@ package schema
 
 import "context"
 
-// Session is the subset of session.Session required by
+// ChannelSession is the subset of session.ChannelSession required by
 // MemoryStore.Consolidate. Defined here to avoid an import cycle
 // (session imports schema, so schema cannot import session).
-type Session interface {
+type ChannelSession interface {
 	// Messages returns the full message history of the session, including all tool calls.
 	Messages() Messages
 
@@ -25,7 +25,7 @@ type Session interface {
 
 // SessionSaver persists a session after consolidation advances its pointer.
 type SessionSaver interface {
-	SaveConsolidated(s Session) error
+	SaveConsolidated(s ChannelSession) error
 }
 
 // MemoryStore manages long-term memory and history for the agent.
@@ -40,6 +40,6 @@ type MemoryStore interface {
 // MemoryCompactor orchestrates memory consolidation: it selects old messages,
 // calls the LLM to summarise them, and persists the result via a MemoryStore.
 type MemoryCompactor interface {
-	Compact(ctx context.Context, s Session, archiveAll bool) error
-	Schedule(key string, sess Session, archiveAll bool)
+	Compact(ctx context.Context, s ChannelSession, archiveAll bool) error
+	Schedule(key string, sess ChannelSession, archiveAll bool)
 }

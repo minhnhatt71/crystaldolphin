@@ -28,3 +28,8 @@ type AgentLooper interface {
 	// processing messages from the bus until context is cancelled.
 	Run(ctx context.Context) error
 }
+
+// Agent executes a single LLM ↔ tool loop for one request.
+type Agent interface {
+	Execute(ctx context.Context, conversation Messages, onProgress func(string)) (string, []string)
+}

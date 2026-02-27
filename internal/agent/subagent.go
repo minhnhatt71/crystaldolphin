@@ -11,38 +11,27 @@ import (
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
+	"github.com/crystaldolphin/crystaldolphin/internal/shared/llmutils"
 	"github.com/crystaldolphin/crystaldolphin/internal/tools"
 )
 
 // SubagentManager manages background goroutine tasks (subagents).
-// Each subagent has its own isolated tool registry (no message/spawn tools).
-// Mirrors nanobot's Python SubagentManager.
+// Each subagent is constructed via AgentFactory.NewSubAgent() so it carries
+// a restricted tool set (no message/spawn/cron tools).
 type SubagentManager struct {
-	provider  schema.LLMProvider
-	workspace string
-	bus       bus.Bus
-	settings  schema.AgentSettings
-	reg       *tools.Registry
+	factory *AgentFactory
+	bus     bus.Bus
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
 }
 
-// NewSubagentManager creates a SubagentManager.
-// reg must be the subagent-scoped registry (no spawn/message tools).
-// A fresh ToolList is built from it on every execution, so runs are isolated.
-func NewSubagentManager(
-	provider schema.LLMProvider,
-	messages bus.Bus,
-	settings schema.AgentSettings,
-	registry *tools.Registry,
-) *SubagentManager {
+// NewSubagentManager creates a SubagentManager backed by the given factory.
+func NewSubagentManager(factory *AgentFactory, bus bus.Bus) *SubagentManager {
 	return &SubagentManager{
-		provider: provider,
-		bus:      messages,
-		settings: settings,
-		reg:      registry,
-		running:  make(map[string]context.CancelFunc),
+		factory: factory,
+		bus:     bus,
+		running: make(map[string]context.CancelFunc),
 	}
 }
 
@@ -50,12 +39,8 @@ func NewSubagentManager(
 // Implements tools.Spawner.
 func (sm *SubagentManager) Spawn(ctx context.Context, task, label, originChannel, originChatID string) (string, error) {
 	taskID := shortID()
-	if label == "" {
-		label = task
-		if len(label) > 30 {
-			label = label[:30] + "..."
-		}
-	}
+	label = llmutils.StringOrDefault(label, task)
+	label = llmutils.Truncate(label, 30)
 
 	subctx, cancel := context.WithCancel(context.Background()) // detached from caller
 
@@ -77,22 +62,15 @@ func (sm *SubagentManager) Spawn(ctx context.Context, task, label, originChannel
 	return fmt.Sprintf("Subagent [%s] started (id: %s). I'll notify you when it completes.", label, taskID), nil
 }
 
-// RunningCount returns the number of currently running subagents.
-func (sm *SubagentManager) RunningCount() int {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	return len(sm.running)
-}
-
 func (sm *SubagentManager) runSubagent(
 	ctx context.Context,
 	taskId, task, label, originChannel, originChatId string,
 ) {
 	slog.Info("Subagent starting", "id", taskId, "label", label)
 
-	finalResult, err := sm.executeTask(ctx, task, taskId)
+	result, err := sm.executeTask(ctx, task, taskId)
 	if err != nil {
-		finalResult = "Error: " + err.Error()
+		result = "Error: " + err.Error()
 		slog.Error("Subagent failed", "id", taskId, "err", err)
 	} else {
 		slog.Info("Subagent completed", "id", taskId)
@@ -103,60 +81,21 @@ func (sm *SubagentManager) runSubagent(
 		status = "failed"
 	}
 
-	sm.announceResult(label, task, finalResult, status, originChannel, originChatId)
+	sm.announceResult(label, task, result, status, originChannel, originChatId)
 }
 
-func (sm *SubagentManager) executeTask(ctx context.Context, task, taskId string) (string, error) {
-	tls := sm.reg.GetAll()
+func (sm *SubagentManager) executeTask(ctx context.Context, task, _ string) (string, error) {
+	subAgent := sm.factory.NewSubAgent()
 
-	msgs := schema.NewMessages(
-		schema.NewSystemMessage(sm.buildSystemPrompt()),
+	conversation := schema.NewMessages(
+		schema.NewSystemMessage(subAgent.buildSystemPrompt()),
 		schema.NewUserMessage(task),
 	)
 
-	maxIter := sm.settings.MaxIter
+	content, _ := subAgent.Execute(ctx, conversation, nil)
+	content = llmutils.StringOrDefault(content, "Task completed but no final response was generated.")
 
-	for i := 0; i < maxIter; i++ {
-		options := schema.NewChatOptions(sm.settings.Model, sm.settings.MaxTokens, sm.settings.Temperature)
-		resp, err := sm.provider.Chat(ctx, msgs, tls.Definitions(), options)
-		if err != nil {
-			return "", err
-		}
-
-		if len(resp.ToolCalls) == 0 {
-			content := ""
-			if resp.Content != nil {
-				content = *resp.Content
-			}
-			if content == "" {
-				content = "Task completed but no final response was generated."
-			}
-			return content, nil
-		}
-
-		// Append assistant turn with tool calls.
-		var toolCalls []schema.ToolCall
-		for _, tc := range resp.ToolCalls {
-			toolCalls = append(toolCalls, schema.NewToolCall(tc.Id, tc.Name, tc.Arguments))
-		}
-
-		msgs.AddAssistant(resp.Content, toolCalls, nil)
-
-		// Execute each tool.
-		for _, tc := range resp.ToolCalls {
-			slog.Debug("Subagent tool call", "id", taskId, "tool", tc.Name)
-
-			result, err := tls.Get(tc.Name).Execute(ctx, tc.Arguments)
-			if err != nil {
-				result = fmt.Sprintf("Error executing tool %s: %s", tc.Name, err)
-				slog.Error("Subagent tool execution failed", "id", taskId, "tool", tc.Name, "err", err)
-			}
-
-			msgs.AddToolResult(tc.Id, tc.Name, result)
-		}
-	}
-
-	return "Task completed (max iterations reached).", nil
+	return content, nil
 }
 
 func (sm *SubagentManager) announceResult(
@@ -180,13 +119,35 @@ Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not men
 	sm.bus.PublishInbound(bus.NewInboundMessage("system", "subagent", originChannel+":"+originChatID, content))
 }
 
-func (sm *SubagentManager) buildSystemPrompt() string {
+// shortID generates a short pseudo-unique ID (first 8 chars of a UUID-like value).
+func shortID() string {
+	return fmt.Sprintf("%08x", time.Now().UnixNano()&0xFFFFFFFF)
+}
+
+// SubAgent handles a single background task.
+// It carries a restricted tool set (no spawn/message/cron) and starts fresh
+// with no session history.
+// Constructed per spawn call by AgentFactory.NewSubAgent().
+type SubAgent struct {
+	LoopRunner
+	tools     tools.ToolList // value copy of restricted registry — no MCP tools
+	workspace string
+}
+
+// Execute implements schema.Agent.
+func (a *SubAgent) Execute(ctx context.Context, conversation schema.Messages, onProgress func(string)) (string, []string) {
+	return a.run(ctx, conversation, &a.tools, onProgress)
+}
+
+func (agent *SubAgent) buildSystemPrompt() string {
 	now := time.Now().Format("2006-01-02 15:04 (Monday)")
 	tz, _ := time.Now().Zone()
 	if tz == "" {
 		tz = "UTC"
 	}
-	ws := expandHome(sm.workspace)
+
+	ws := expandHome(agent.workspace)
+
 	goos := runtime.GOOS
 	if goos == "darwin" {
 		goos = "macOS"
@@ -224,9 +185,4 @@ func (sm *SubagentManager) buildSystemPrompt() string {
 		"",
 		"When you have completed the task, provide a clear summary of your findings or actions.",
 	}, "\n")
-}
-
-// shortID generates a short pseudo-unique ID (first 8 chars of a UUID-like value).
-func shortID() string {
-	return fmt.Sprintf("%08x", time.Now().UnixNano()&0xFFFFFFFF)
 }

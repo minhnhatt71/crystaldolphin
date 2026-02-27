@@ -23,6 +23,14 @@ func StripThink(s string) string {
 	return reThink.ReplaceAllString(s, "")
 }
 
+// StringOrDefault returns s if it's not empty, or def if s is empty.
+func StringOrDefault(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
+}
+
 // ToolHint generates a short hint string for a list of tool calls, e.g. "search("weather in London")".
 func ToolHint(tcs []schema.ToolCallResponse) string {
 	parts := make([]string, 0, len(tcs))

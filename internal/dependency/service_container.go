@@ -67,10 +67,13 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	if err := d.Provide(newSubAgentToolRegistry); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newSubagentManager); err != nil {
+	if err := d.Provide(newAgentRegistry); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newAgentRegistry); err != nil {
+	if err := d.Provide(newAgentFactory); err != nil {
+		return nil, err
+	}
+	if err := d.Provide(newSubagentManager); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newMemoryStore); err != nil {
@@ -184,18 +187,32 @@ func newSubAgentToolRegistry(cfg *config.Config) SubagentRegistry {
 	return SubagentRegistry{registry}
 }
 
-func newSubagentManager(provider schema.LLMProvider, bus bus.Bus, cfg *config.Config, model LLMModel, reg SubagentRegistry) *agent.SubagentManager {
-	modelKey := string(model)
-
-	settings := schema.NewAgentSettings(
-		modelKey,
+func newAgentFactory(
+	p schema.LLMProvider,
+	cfg *config.Config,
+	m LLMModel,
+	subReg SubagentRegistry,
+	mcpMgr *mcp.Manager,
+) *agent.AgentFactory {
+	coreSettings := schema.NewAgentSettings(
+		string(m),
+		cfg.Agents.Defaults.MaxToolIter,
+		cfg.Agents.Defaults.Temperature,
+		cfg.Agents.Defaults.MaxTokens,
+		cfg.Agents.Defaults.MemoryWindow,
+	)
+	subSettings := schema.NewAgentSettings(
+		string(m),
 		15,
 		cfg.Agents.Defaults.Temperature,
 		cfg.Agents.Defaults.MaxTokens,
 		0,
 	)
+	return agent.NewAgentFactory(p, coreSettings, subSettings, subReg.Registry, mcpMgr, cfg.WorkspacePath())
+}
 
-	return agent.NewSubagentManager(provider, bus, settings, reg.Registry)
+func newSubagentManager(factory *agent.AgentFactory, b bus.Bus) *agent.SubagentManager {
+	return agent.NewSubagentManager(factory, b)
 }
 
 func newAgentRegistry(
@@ -244,7 +261,7 @@ func newSkillsLoader(cfg *config.Config) schema.SkillLoader {
 	return agent.NewSkillsLoader(cfg.WorkspacePath(), "")
 }
 
-func newContextBuilder(cfg *config.Config, mem schema.MemoryStore, sl schema.SkillLoader) *agent.AgentContextBuilder {
+func newContextBuilder(cfg *config.Config, mem schema.MemoryStore, sl schema.SkillLoader) *agent.PromptContext {
 	return agent.NewContextBuilder(cfg.WorkspacePath(), mem, sl)
 }
 
@@ -254,16 +271,14 @@ func newMCPManager(cfg *config.Config) *mcp.Manager {
 
 func newAgentLoop(
 	b bus.Bus,
-	p schema.LLMProvider,
+	factory *agent.AgentFactory,
 	cfg *config.Config,
 	m LLMModel,
-	mcpMgr *mcp.Manager,
 	sessions *session.Manager,
-	mem schema.MemoryStore,
 	consolidator schema.MemoryCompactor,
 	subMgr *agent.SubagentManager,
 	reg AgentRegistry,
-	cb *agent.AgentContextBuilder,
+	cb *agent.PromptContext,
 ) schema.AgentLooper {
 	settings := schema.NewAgentSettings(
 		string(m),
@@ -273,5 +288,5 @@ func newAgentLoop(
 		cfg.Agents.Defaults.MemoryWindow,
 	)
 
-	return agent.NewAgentLoop(b, p, settings, mcpMgr, sessions, consolidator, reg.Registry, subMgr, cb)
+	return agent.NewAgentLoop(b, factory, settings, sessions, consolidator, reg.Registry, subMgr, cb)
 }

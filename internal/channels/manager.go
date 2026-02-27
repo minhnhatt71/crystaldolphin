@@ -105,7 +105,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 func (m *Manager) dispatchOutbound(ctx context.Context) {
 	for {
 		select {
-		case msg := <-m.b.SubscribeOutbound():
+		case msg := <-m.b.OutboundChan():
 			ch, ok := m.channels[msg.Channel()]
 			if !ok {
 				slog.Debug("unknown channel for outbound message", "channel", msg.Channel())

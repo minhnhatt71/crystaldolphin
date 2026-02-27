@@ -11,8 +11,8 @@ import (
 
 type SessionKey string
 
-// SessionImpl holds one conversation's messages and metadata.
-type SessionImpl struct {
+// ChannelSessionImpl holds one conversation's messages and metadata.
+type ChannelSessionImpl struct {
 	Key              string
 	Entries          schema.Messages
 	CreatedAt        time.Time
@@ -25,8 +25,8 @@ type SessionImpl struct {
 
 // newSession constructs a Session with all fields set, including the unexported
 // lastConsolidated counter. Used only by the manager when loading from disk.
-func newSession(key string, messages schema.Messages, createdAt, updatedAt time.Time, meta map[string]any, lastConsolidated int) schema.Session {
-	return &SessionImpl{
+func newSession(key string, messages schema.Messages, createdAt, updatedAt time.Time, meta map[string]any, lastConsolidated int) schema.ChannelSession {
+	return &ChannelSessionImpl{
 		Key:              key,
 		Entries:          messages,
 		CreatedAt:        createdAt,
@@ -38,22 +38,22 @@ func newSession(key string, messages schema.Messages, createdAt, updatedAt time.
 
 // NewArchivedSession creates a temporary session with pre-populated messages
 // and no consolidation history. Used for /new consolidation of the old snapshot.
-func NewArchivedSession(key string, messages schema.Messages) schema.Session {
-	return &SessionImpl{
+func NewArchivedSession(key string, messages schema.Messages) schema.ChannelSession {
+	return &ChannelSessionImpl{
 		Key:     key,
 		Entries: messages,
 	}
 }
 
 // Messages returns the full message history of the session, including all tool calls.
-func (s *SessionImpl) Messages() schema.Messages {
+func (s *ChannelSessionImpl) Messages() schema.Messages {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.Entries
 }
 
 // AddUser appends a user message to the session.
-func (s *SessionImpl) AddUser(content string) {
+func (s *ChannelSessionImpl) AddUser(content string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Entries.AddUser(content)
@@ -61,7 +61,7 @@ func (s *SessionImpl) AddUser(content string) {
 }
 
 // AddAssistant appends an assistant message to the session.
-func (s *SessionImpl) AddAssistant(content string, toolsUsed []string) {
+func (s *ChannelSessionImpl) AddAssistant(content string, toolsUsed []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -77,7 +77,7 @@ func (s *SessionImpl) AddAssistant(content string, toolsUsed []string) {
 }
 
 // History returns the last messages for the LLM.
-func (s *SessionImpl) History(maxMessages int) schema.Messages {
+func (s *ChannelSessionImpl) History(maxMessages int) schema.Messages {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -92,14 +92,14 @@ func (s *SessionImpl) History(maxMessages int) schema.Messages {
 }
 
 // Len returns the number of messages in the session.
-func (s *SessionImpl) Len() int {
+func (s *ChannelSessionImpl) Len() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.Entries.Messages)
 }
 
 // Clear resets messages and the consolidation pointer.
-func (s *SessionImpl) Clear() {
+func (s *ChannelSessionImpl) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Entries = schema.NewMessages()
@@ -109,14 +109,14 @@ func (s *SessionImpl) Clear() {
 
 // LastConsolidated returns the consolidation pointer.
 // Caller must hold s.mu.
-func (s *SessionImpl) LastConsolidated() int {
+func (s *ChannelSessionImpl) LastConsolidated() int {
 	return s.lastConsolidated
 }
 
 // Compact updates the consolidation cursor after a successful run.
 // archive=true resets lastConsolidated to 0; false compacts to the keepCount tail.
 // Must only be called from the consolidation goroutine (never concurrently).
-func (s *SessionImpl) Compact(archive bool, keepCount int) {
+func (s *ChannelSessionImpl) Compact(archive bool, keepCount int) {
 	if archive {
 		s.lastConsolidated = 0
 		s.UpdatedAt = time.Now()
@@ -137,7 +137,7 @@ func (s *SessionImpl) Compact(archive bool, keepCount int) {
 // ConsolidatedMessages returns the slice of messages eligible for consolidation and
 // true, or an empty Messages and false when there is nothing to do.
 // Must only be called from the consolidation goroutine (never concurrently).
-func (s *SessionImpl) ConsolidatedMessages(archive bool, memWindow, keepCount int) (schema.Messages, bool) {
+func (s *ChannelSessionImpl) ConsolidatedMessages(archive bool, memWindow, keepCount int) (schema.Messages, bool) {
 	msgs := s.Entries.Messages
 	lastConsolidated := s.lastConsolidated
 

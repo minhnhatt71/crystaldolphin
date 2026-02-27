@@ -54,8 +54,8 @@ func NewCompactor(store schema.MemoryStore, saver schema.SessionSaver, provider 
 
 // Schedule is the single entry point for all consolidation work.
 // It enforces at most one active goroutine per key with one pending slot.
-func (c *MemoryCompactor) Schedule(key string, sess schema.Session, archiveAll bool) {
-	if sess.Messages().Len() <= c.memoryWindow {
+func (c *MemoryCompactor) Schedule(key string, sess schema.ChannelSession, archiveAll bool) {
+	if sess.Messages().Len() <= c.memoryWindow && !archiveAll {
 		return
 	}
 
@@ -74,7 +74,7 @@ func (c *MemoryCompactor) Schedule(key string, sess schema.Session, archiveAll b
 	go c.performOneAtAtime(key, sess, archiveAll)
 }
 
-func (c *MemoryCompactor) performOneAtAtime(key string, sess schema.Session, archiveAll bool) {
+func (c *MemoryCompactor) performOneAtAtime(key string, sess schema.ChannelSession, archiveAll bool) {
 	for {
 		err := c.Compact(context.Background(), sess, archiveAll)
 
@@ -101,7 +101,7 @@ func (c *MemoryCompactor) performOneAtAtime(key string, sess schema.Session, arc
 //
 // archive=true processes every message (used on /new); otherwise only the
 // slice between LastConsolidated and len-keepCount is processed.
-func (c *MemoryCompactor) Compact(ctx context.Context, s schema.Session, archiveAll bool) error {
+func (c *MemoryCompactor) Compact(ctx context.Context, s schema.ChannelSession, archiveAll bool) error {
 	keepCount := c.memoryWindow / 2
 
 	msgs, ok := s.ConsolidatedMessages(archiveAll, c.memoryWindow, keepCount)
