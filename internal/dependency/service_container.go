@@ -228,8 +228,8 @@ func newMemoryStore(cfg *config.Config) (schema.MemoryStore, error) {
 	return mem, nil
 }
 
-func newConsolidator(mem schema.MemoryStore, saver *session.Manager, p schema.LLMProvider, m LLMModel, reg AgentRegistry) schema.MemoryCompactor {
-	return agent.NewCompactor(mem, saver, p, string(m), reg.Registry)
+func newConsolidator(cfg *config.Config, mem schema.MemoryStore, saver *session.Manager, p schema.LLMProvider, m LLMModel, reg AgentRegistry) schema.MemoryCompactor {
+	return agent.NewCompactor(mem, saver, p, string(m), cfg.Agents.Defaults.MemoryWindow, reg.Registry)
 }
 
 func newSkillsLoader(cfg *config.Config) schema.SkillLoader {

@@ -37,6 +37,9 @@ internal/agent/                 Core agent logic
   skills.go                     SKILL.md loader; injects skill XML into system prompt
   subagent.go                   SpawnTool support — runs a background agent goroutine
 
+internal/mcp/                   MCP (Model Context Protocol) client
+  mcp.go                        ServerConfig, ConnectServers() — stdio subprocess + HTTP POST transports
+
 internal/tools/                 LLM-callable tools
   registry.go                   Tool interface; Registry.Register/Execute/GetDefinitions()
   shell.go                      exec tool — runs shell commands; 9 RE2 deny patterns
@@ -45,7 +48,6 @@ internal/tools/                 LLM-callable tools
   message.go                    message tool — routes outbound replies via the bus
   spawn.go                      spawn tool — launches sub-agent goroutines
   cron.go                       cron tool — add / list / remove scheduled jobs
-  mcp.go                        MCP client — stdio subprocess + HTTP POST transports
 
 internal/providers/             LLM provider integrations
   registry.go                   18 ProviderSpec entries (base URLs, auth styles)
@@ -116,6 +118,7 @@ See [gateway-architecture.md](gateway-architecture.md) for the full startup sequ
 | Change system prompt / context | `internal/agent/context.go` |
 | Change memory / consolidation | `internal/agent/memory.go` |
 | Change cron scheduling | `internal/cron/service.go` + `internal/tools/cron.go` |
+| Change MCP client / transports | `internal/mcp/mcp.go` |
 
 ## Compatibility contracts (do not break)
 

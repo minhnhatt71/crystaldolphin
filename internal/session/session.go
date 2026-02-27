@@ -69,8 +69,8 @@ func (s *SessionImpl) AddAssistant(content string, toolsUsed []string) {
 	s.UpdatedAt = time.Now()
 }
 
-// GetHistory returns the last maxMessages messages for the LLM.
-func (s *SessionImpl) GetHistory(maxMessages int) schema.Messages {
+// History returns the last messages for the LLM.
+func (s *SessionImpl) History(maxMessages int) schema.Messages {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

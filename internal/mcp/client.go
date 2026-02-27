@@ -1,4 +1,4 @@
-package tools
+package mcp
 
 import (
 	"bufio"
@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -16,56 +15,10 @@ import (
 	"time"
 )
 
-// MCPServerConfig is the configuration for a single MCP server.
-// Mirrors config.MCPServerConfig — defined here without importing config
-// to keep the dependency graph clean.
-type MCPServerConfig struct {
-	Command string
-	Args    []string
-	Env     map[string]string
-	URL     string
-	Headers map[string]string
-}
-
-func NewMCPServerConfig(command string, args []string, env map[string]string, url string, headers map[string]string) MCPServerConfig {
-	return MCPServerConfig{
-		Command: command,
-		Args:    args,
-		Env:     env,
-		URL:     url,
-		Headers: headers,
-	}
-}
-
-// ---------------------------------------------------------------------------
-// MCPToolWrapper — wraps one discovered MCP tool as a Tool
-// ---------------------------------------------------------------------------
-
-// MCPToolWrapper wraps a single tool discovered from an MCP server.
-type MCPToolWrapper struct {
-	client      *MCPClient
-	name        string
-	origName    string
-	description string
-	parameters  json.RawMessage
-}
-
-func (w *MCPToolWrapper) Name() string                { return w.name }
-func (w *MCPToolWrapper) Description() string         { return w.description }
-func (w *MCPToolWrapper) Parameters() json.RawMessage { return w.parameters }
-
-func (w *MCPToolWrapper) Execute(ctx context.Context, params map[string]any) (string, error) {
-	return w.client.CallTool(ctx, w.origName, params)
-}
-
-// ---------------------------------------------------------------------------
-// MCPClient — manages a connection to one MCP server (stdio or HTTP)
-// ---------------------------------------------------------------------------
-
-// MCPClient handles JSON-RPC communication with a single MCP server.
-type MCPClient struct {
+// client manages JSON-RPC communication with a single MCP server (stdio or HTTP).
+type client struct {
 	name       string
-	cfg        MCPServerConfig
+	cfg        ServerConfig
 	httpClient *http.Client
 
 	// Stdio fields (non-nil when command-based)
@@ -78,8 +31,8 @@ type MCPClient struct {
 	ready  atomic.Bool
 }
 
-func newMCPClient(name string, cfg MCPServerConfig) *MCPClient {
-	return &MCPClient{
+func newClient(name string, cfg ServerConfig) *client {
+	return &client{
 		name: name,
 		cfg:  cfg,
 		httpClient: &http.Client{
@@ -88,8 +41,8 @@ func newMCPClient(name string, cfg MCPServerConfig) *MCPClient {
 	}
 }
 
-// Connect starts the MCP server subprocess (or prepares HTTP) and initializes.
-func (c *MCPClient) Connect(ctx context.Context) error {
+// connect starts the MCP server subprocess (or prepares HTTP) and initializes.
+func (c *client) connect(ctx context.Context) error {
 	if c.cfg.Command != "" {
 		return c.connectStdio(ctx)
 	}
@@ -101,7 +54,7 @@ func (c *MCPClient) Connect(ctx context.Context) error {
 	return fmt.Errorf("MCP server %q: no command or url configured", c.name)
 }
 
-func (c *MCPClient) connectStdio(ctx context.Context) error {
+func (c *client) connectStdio(ctx context.Context) error {
 	args := c.cfg.Args
 	c.cmd = exec.CommandContext(ctx, c.cfg.Command, args...)
 	if c.cfg.Env != nil {
@@ -134,8 +87,8 @@ func (c *MCPClient) connectStdio(ctx context.Context) error {
 	return nil
 }
 
-// ListTools returns the tools exposed by this MCP server.
-func (c *MCPClient) ListTools(ctx context.Context) ([]map[string]any, error) {
+// listTools returns the tools exposed by this MCP server.
+func (c *client) listTools(ctx context.Context) ([]map[string]any, error) {
 	resp, err := c.call(ctx, "tools/list", nil)
 	if err != nil {
 		return nil, err
@@ -149,8 +102,8 @@ func (c *MCPClient) ListTools(ctx context.Context) ([]map[string]any, error) {
 	return result.Tools, nil
 }
 
-// CallTool invokes a named tool on the MCP server with the given arguments.
-func (c *MCPClient) CallTool(ctx context.Context, toolName string, args map[string]any) (string, error) {
+// callTool invokes a named tool on the MCP server with the given arguments.
+func (c *client) callTool(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	payload := map[string]any{
 		"name":      toolName,
 		"arguments": args,
@@ -189,7 +142,7 @@ func (c *MCPClient) CallTool(ctx context.Context, toolName string, args map[stri
 // JSON-RPC plumbing
 // ---------------------------------------------------------------------------
 
-func (c *MCPClient) initialize(ctx context.Context) error {
+func (c *client) initialize(ctx context.Context) error {
 	params := map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
@@ -206,18 +159,18 @@ func (c *MCPClient) initialize(ctx context.Context) error {
 	return nil
 }
 
-func (c *MCPClient) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (c *client) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	if c.cfg.URL != "" {
 		return c.callHTTP(ctx, method, params)
 	}
 	return c.callStdio(ctx, method, params)
 }
 
-func (c *MCPClient) nextRequestID() int64 {
+func (c *client) nextRequestID() int64 {
 	return atomic.AddInt64(&c.nextID, 1)
 }
 
-func (c *MCPClient) callStdio(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (c *client) callStdio(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	id := c.nextRequestID()
 	req := map[string]any{
 		"jsonrpc": "2.0",
@@ -280,7 +233,7 @@ func (c *MCPClient) callStdio(ctx context.Context, method string, params any) (j
 	}
 }
 
-func (c *MCPClient) callHTTP(ctx context.Context, method string, params any) (json.RawMessage, error) {
+func (c *client) callHTTP(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	id := c.nextRequestID()
 	req := map[string]any{
 		"jsonrpc": "2.0",
@@ -319,61 +272,4 @@ func (c *MCPClient) callHTTP(ctx context.Context, method string, params any) (js
 	}
 	result, _ := json.Marshal(rpcResp["result"])
 	return json.RawMessage(result), nil
-}
-
-// ConnectMCPServers connects to all configured MCP servers and registers
-// their tools into the given Registry. Non-fatal: failed servers are logged
-// and skipped. Returns a cleanup function that stops all subprocess servers.
-func ConnectMCPServers(ctx context.Context, servers map[string]MCPServerConfig, ts *ToolList) func() {
-	var clients []*MCPClient
-
-	for name, cfg := range servers {
-		client := newMCPClient(name, cfg)
-		if err := client.Connect(ctx); err != nil {
-			slog.Error("MCP server connect failed", "server", name, "err", err)
-			continue
-		}
-
-		tools, err := client.ListTools(ctx)
-		if err != nil {
-			slog.Error("MCP server list_tools failed", "server", name, "err", err)
-			continue
-		}
-
-		for _, toolDef := range tools {
-			toolName, _ := toolDef["name"].(string)
-			if toolName == "" {
-				continue
-			}
-			desc, _ := toolDef["description"].(string)
-			inputSchema, _ := toolDef["inputSchema"].(map[string]any)
-			if inputSchema == nil {
-				inputSchema = map[string]any{"type": "object", "properties": map[string]any{}}
-			}
-
-			schemaBytes, _ := json.Marshal(inputSchema)
-
-			wrapper := &MCPToolWrapper{
-				client:      client,
-				name:        "mcp_" + name + "_" + toolName,
-				origName:    toolName,
-				description: desc,
-				parameters:  json.RawMessage(schemaBytes),
-			}
-
-			ts.Add(wrapper)
-
-			slog.Debug("MCP tool registered", "server", name, "tool", wrapper.name)
-		}
-		slog.Info("MCP server connected", "server", name, "tools", len(tools))
-		clients = append(clients, client)
-	}
-
-	return func() {
-		for _, c := range clients {
-			if c.cmd != nil && c.cmd.Process != nil {
-				c.cmd.Process.Kill() //nolint:errcheck
-			}
-		}
-	}
 }

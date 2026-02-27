@@ -17,3 +17,10 @@ type Tool interface {
 	Parameters() json.RawMessage
 	Execute(ctx context.Context, params map[string]any) (string, error)
 }
+
+// ToolRegistrar is implemented by any collection that accepts Tool registrations
+// at runtime. Defined here so packages like internal/mcp can register discovered
+// tools without importing internal/tools.
+type ToolRegistrar interface {
+	Add(t Tool) Tool
+}

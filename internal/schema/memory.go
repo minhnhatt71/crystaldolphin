@@ -37,7 +37,8 @@ type MemoryStore interface {
 // MemoryCompactor orchestrates memory consolidation: it selects old messages,
 // calls the LLM to summarise them, and persists the result via a MemoryStore.
 type MemoryCompactor interface {
-	Compact(ctx context.Context, s Session, archiveAll bool, memoryWindow int) error
+	Compact(ctx context.Context, s Session, archiveAll bool) error
+	Schedule(key string, sess Session, archiveAll bool)
 }
 
 // Memory is the result of a consolidation selection: the messages to process.
