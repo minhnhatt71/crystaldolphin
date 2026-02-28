@@ -30,10 +30,10 @@ type Bus interface {
 	PublishInbound(msg InboundMessage)
 	// PublishOutbound delivers a response from the agent to a channel.
 	PublishOutbound(msg OutboundMessage)
-	// InboundChan returns a receive-only channel for the agent to consume.
-	InboundChan() <-chan InboundMessage
-	// OutboundChan returns a receive-only channel for the channel manager to consume.
-	OutboundChan() <-chan OutboundMessage
+	// SubscribeInbound returns a receive-only channel for the agent to consume.
+	SubscribeInbound() <-chan InboundMessage
+	// SubscribeOutbound returns a receive-only channel from external channels.
+	SubscribeOutbound() <-chan OutboundMessage
 }
 
 // MessageBus is the default in-process Bus implementation backed by buffered Go channels.
@@ -42,8 +42,8 @@ type Bus interface {
 // pushes OutboundMessages back for the channel manager to route.
 // Both directions use buffered channels so senders never block on a slow consumer.
 type MessageBus struct {
-	inbound  chan InboundMessage  // channels -> backend
-	outbound chan OutboundMessage // backend -> channels
+	inbound  chan InboundMessage
+	outbound chan OutboundMessage
 }
 
 func NewMessageBus(bufSize int) Bus {
@@ -63,12 +63,12 @@ func (b *MessageBus) PublishOutbound(msg OutboundMessage) {
 	b.outbound <- msg
 }
 
-// InboundChan returns a receive-only view of the inbound channel.
-func (b *MessageBus) InboundChan() <-chan InboundMessage {
+// SubscribeInbound returns a receive-only view of the inbound channel.
+func (b *MessageBus) SubscribeInbound() <-chan InboundMessage {
 	return b.inbound
 }
 
-// OutboundChan returns a receive-only view of the outbound channel.
-func (b *MessageBus) OutboundChan() <-chan OutboundMessage {
+// SubscribeOutbound returns a receive-only view of the outbound channel.
+func (b *MessageBus) SubscribeOutbound() <-chan OutboundMessage {
 	return b.outbound
 }

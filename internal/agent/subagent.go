@@ -37,7 +37,7 @@ func NewSubagentManager(factory *AgentFactory, bus bus.Bus) *SubagentManager {
 
 // Spawn starts a background subagent goroutine and returns immediately.
 // Implements tools.Spawner.
-func (sm *SubagentManager) Spawn(ctx context.Context, task, label, originChannel, originChatID string) (string, error) {
+func (sm *SubagentManager) Spawn(ctx context.Context, task, label string, originChannel bus.ChannelType, originChatID string) (string, error) {
 	taskID := shortID()
 	label = llmutils.StringOrDefault(label, task)
 	label = llmutils.Truncate(label, 30)
@@ -64,7 +64,7 @@ func (sm *SubagentManager) Spawn(ctx context.Context, task, label, originChannel
 
 func (sm *SubagentManager) runSubagent(
 	ctx context.Context,
-	taskId, task, label, originChannel, originChatId string,
+	taskId, task, label string, originChannel bus.ChannelType, originChatId string,
 ) {
 	slog.Info("Subagent starting", "id", taskId, "label", label)
 
@@ -99,11 +99,8 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task, _ string) (str
 }
 
 func (sm *SubagentManager) announceResult(
-	label,
-	task,
-	result,
-	status,
-	originChannel,
+	label, task, result, status string,
+	originChannel bus.ChannelType,
 	originChatID string,
 ) {
 	content := fmt.Sprintf(`[Subagent '%s' %s]
@@ -116,7 +113,9 @@ Result:
 Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not mention technical details like "subagent" or task IDs.`,
 		label, status, task, result)
 
-	sm.bus.PublishInbound(bus.NewInboundMessage("system", "subagent", originChannel+":"+originChatID, content))
+	sm.bus.PublishInbound(
+		bus.NewInboundMessage(bus.ChannelSystem, bus.SenderIdSubAgent, string(originChannel)+":"+originChatID, content, ""),
+	)
 }
 
 // shortID generates a short pseudo-unique ID (first 8 chars of a UUID-like value).

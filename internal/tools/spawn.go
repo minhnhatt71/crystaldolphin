@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
@@ -56,7 +57,7 @@ func (t *SpawnTool) Execute(ctx context.Context, params map[string]any) (string,
 	tc := TurnCtx(ctx)
 	originChannel := tc.Channel
 	if originChannel == "" {
-		originChannel = "cli"
+		originChannel = bus.ChannelCLI
 	}
 	originChatID := tc.ChatID
 	if originChatID == "" {

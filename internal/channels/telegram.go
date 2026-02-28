@@ -318,10 +318,3 @@ func htmlEscape(s string) string {
 	s = strings.ReplaceAll(s, ">", "&gt;")
 	return s
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

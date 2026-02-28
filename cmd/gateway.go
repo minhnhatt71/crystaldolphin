@@ -62,61 +62,57 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 	if err := writePIDFile(); err != nil {
 		return err
 	}
+
 	defer removePIDFile()
 
+	agentLoop := svc.AgentLoop()
 	messageBus := svc.MessageBus()
-	cronService := svc.CronService()
-	loop := svc.AgentLoop()
+	cronManager := svc.CronService()
 
-	// Wire cron → agent callback.
-	cronService.OnJobStart(func(ctx context.Context, job cron.CronJob) (string, error) {
-		sessionKey := "cron:" + job.ID
-		ch := ""
-		chatID := "direct"
+	cronManager.OnJobFunc(func(ctx context.Context, job cron.CronJob) (string, error) {
+		routingKey := "cron:" + job.ID
+		ch := bus.ChannelCLI
+		chatId := "direct"
 		if job.Payload.Channel != nil {
-			ch = *job.Payload.Channel
+			ch = bus.ChannelType(*job.Payload.Channel)
 		}
 		if job.Payload.To != nil {
-			chatID = *job.Payload.To
-		}
-		if ch == "" {
-			ch = "cli"
+			chatId = *job.Payload.To
 		}
 
-		resp := loop.ProcessDirect(ctx, job.Payload.Message, sessionKey, ch, chatID)
+		msg := bus.NewInboundMessage(ch, bus.SenderIdCLI, chatId, job.Payload.Message, routingKey)
+		resp := agentLoop.ProcessDirect(ctx, msg)
 		if job.Payload.Deliver && job.Payload.To != nil {
-			messageBus.PublishOutbound(bus.NewOutboundMessage(ch, chatID, resp))
+			messageBus.PublishOutbound(bus.NewOutboundMessage(ch, chatId, resp))
 		}
 		return resp, nil
 	})
 
-	// Wire heartbeat → agent callback.
-	hb := heartbeat.NewService(
-		cfg.WorkspacePath(),
+	heartbeat := heartbeat.NewService(cfg.WorkspacePath(),
 		func(ctx context.Context, content string) error {
-			loop.ProcessDirect(ctx, content, "heartbeat:direct", "heartbeat", "direct")
+			agentLoop.ProcessDirect(ctx, bus.NewInboundMessage(bus.ChannelHeartbeat, bus.SenderIdCLI, "direct", content, "heartbeat:direct"))
 			return nil
 		},
 		0,
 	)
 
-	// Graceful shutdown context.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+
 	defer stop()
 
 	g, gctx := errgroup.WithContext(ctx)
 
-	channelMgr := channels.NewManager(cfg, messageBus)
-	if enabled := channelMgr.EnabledChannels(); len(enabled) > 0 {
+	channelManager := channels.NewManager(cfg, messageBus)
+	if enabled := channelManager.EnabledChannels(); len(enabled) > 0 {
 		fmt.Printf("✓ Channels enabled: %s\n", strings.Join(enabled, ", "))
 	} else {
 		fmt.Println("Warning: no channels enabled")
 	}
 
-	g.Go(func() error { return loop.Run(gctx) })
-	g.Go(func() error { return cronService.Start(gctx) })
-	g.Go(func() error { return hb.Start(gctx) })
-	g.Go(func() error { return channelMgr.StartAll(gctx) })
+	g.Go(func() error { return agentLoop.Run(gctx) })
+	g.Go(func() error { return heartbeat.Start(gctx) })
+	g.Go(func() error { return cronManager.Start(gctx) })
+	g.Go(func() error { return channelManager.StartAll(gctx) })
 
 	fmt.Printf("%s Gateway running. Press Ctrl+C to stop.\n", logo)
 

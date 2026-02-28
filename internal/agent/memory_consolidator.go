@@ -104,7 +104,7 @@ func (c *MemoryCompactor) performOneAtAtime(key string, sess schema.ChannelSessi
 func (c *MemoryCompactor) Compact(ctx context.Context, s schema.ChannelSession, archiveAll bool) error {
 	keepCount := c.memoryWindow / 2
 
-	msgs, ok := s.ConsolidatedMessages(archiveAll, c.memoryWindow, keepCount)
+	msgs, ok := s.CompactedMessages(archiveAll, c.memoryWindow, keepCount)
 	if !ok {
 		return nil
 	}
@@ -115,11 +115,11 @@ func (c *MemoryCompactor) Compact(ctx context.Context, s schema.ChannelSession, 
 
 	s.Compact(archiveAll, keepCount)
 
-	if err := c.saver.SaveConsolidated(s); err != nil {
+	if err := c.saver.SaveCompacted(s); err != nil {
 		slog.Warn("memory consolidation: failed to persist session pointer", "err", err)
 	}
 
-	slog.Info("memory consolidation done", "last_consolidated", s.LastConsolidated())
+	slog.Info("memory consolidation done", "last_consolidated", s.LastCompacted())
 
 	return nil
 }

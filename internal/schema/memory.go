@@ -9,13 +9,13 @@ type ChannelSession interface {
 	// Messages returns the full message history of the session, including all tool calls.
 	Messages() Messages
 
-	// ConsolidatedMessages returns the slice of messages eligible for consolidation and
+	// CompactedMessages returns the slice of messages eligible for consolidation and
 	// true, or an empty Messages and false when there is nothing to do.
 	// Must only be called from the consolidation goroutine (never concurrently).
-	ConsolidatedMessages(archive bool, memWindow, keepCount int) (Messages, bool)
+	CompactedMessages(archive bool, memWindow, keepCount int) (Messages, bool)
 
-	// LastConsolidated returns the consolidation pointer.
-	LastConsolidated() int // returns the current LastConsolidated pointer
+	// LastCompacted returns the consolidation pointer.
+	LastCompacted() int // returns the current LastConsolidated pointer
 
 	// Compact updates the consolidation cursor after a successful run.
 	// archive=true resets lastConsolidated to 0; false compacts to the keepCount tail.
@@ -25,7 +25,7 @@ type ChannelSession interface {
 
 // SessionSaver persists a session after consolidation advances its pointer.
 type SessionSaver interface {
-	SaveConsolidated(s ChannelSession) error
+	SaveCompacted(s ChannelSession) error
 }
 
 // MemoryStore manages long-term memory and history for the agent.

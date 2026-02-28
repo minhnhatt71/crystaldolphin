@@ -1,6 +1,10 @@
 package schema
 
-import "context"
+import (
+	"context"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+)
 
 type AgentSettings struct {
 	Model        string
@@ -21,9 +25,9 @@ func NewAgentSettings(model string, maxIter int, temperature float64, maxTokens 
 }
 
 type AgentLooper interface {
-	// ProcessDirect is for processing messages that bypass the normal bus flow,
-	// e.g. system messages or subagent messages.
-	ProcessDirect(ctx context.Context, content, key, channel, chatId string) string
+	// ProcessDirect processes a message outside the bus (CLI, cron, heartbeat).
+	// Returns the final text response.
+	ProcessDirect(ctx context.Context, msg bus.InboundMessage) string
 	// Run starts the main agent loop,
 	// processing messages from the bus until context is cancelled.
 	Run(ctx context.Context) error

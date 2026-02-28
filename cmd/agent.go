@@ -19,10 +19,10 @@ import (
 )
 
 var (
-	agentMessage  string
-	agentSession  string
-	agentMarkdown bool
-	agentLogs     bool
+	message  string
+	key      string
+	markdown bool
+	logs     bool
 )
 
 var agentCmd = &cobra.Command{
@@ -32,10 +32,10 @@ var agentCmd = &cobra.Command{
 }
 
 func init() {
-	agentCmd.Flags().StringVarP(&agentMessage, "message", "m", "", "Send a single message and exit")
-	agentCmd.Flags().StringVarP(&agentSession, "session", "s", "cli:direct", "Session ID")
-	agentCmd.Flags().BoolVar(&agentMarkdown, "markdown", true, "Render output as Markdown (no-op: plain output)")
-	agentCmd.Flags().BoolVar(&agentLogs, "logs", false, "Show runtime logs")
+	agentCmd.Flags().StringVarP(&message, "message", "m", "", "Send a single message and exit")
+	agentCmd.Flags().StringVarP(&key, "key", "s", "cli:direct", "Routing key")
+	agentCmd.Flags().BoolVar(&markdown, "markdown", true, "Render output as Markdown (no-op: plain output)")
+	agentCmd.Flags().BoolVar(&logs, "logs", false, "Show runtime logs")
 }
 
 var exitCommands = map[string]bool{
@@ -57,26 +57,28 @@ func runAgent(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	sessionKey := agentSession
-	channel, chatId := parseSessionKey(sessionKey)
+	routingKey := key
+	channel, chatId := parseRoutingKey(routingKey)
 
 	loop := container.AgentLoop()
 	messageBus := container.MessageBus()
 
-	if agentMessage != "" {
-		return runSingleMessage(loop, sessionKey, channel, chatId)
+	if message != "" {
+		return runSingleMessage(loop, routingKey, channel, chatId)
 	}
 
 	return runInteractive(loop, messageBus, channel, chatId)
 }
 
 // runSingleMessage sends one message to the agent and prints the response.
-func runSingleMessage(loop schema.AgentLooper, sessionKey, channel, chatId string) error {
+func runSingleMessage(loop schema.AgentLooper, key string, channel bus.ChannelType, chatId string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
+	msg := bus.NewInboundMessage(channel, "user", chatId, message, key)
+
 	fmt.Fprintf(os.Stderr, "  ↳ thinking...\n")
-	res := loop.ProcessDirect(ctx, agentMessage, sessionKey, channel, chatId)
+	res := loop.ProcessDirect(ctx, msg)
 
 	printResponse(res)
 	return nil
@@ -84,7 +86,7 @@ func runSingleMessage(loop schema.AgentLooper, sessionKey, channel, chatId strin
 
 // runInteractive starts the REPL loop: reads lines from stdin, sends each to
 // the agent via the bus, and waits for each reply before prompting again.
-func runInteractive(loop schema.AgentLooper, msgBus bus.Bus, channel, chatId string) error {
+func runInteractive(loop schema.AgentLooper, msgBus bus.Bus, channel bus.ChannelType, chatId string) error {
 	fmt.Printf("%s Interactive mode (type 'exit' or Ctrl+C to quit)\n\n", logo)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -140,15 +142,15 @@ func listenForSignals(cancel context.CancelFunc) {
 
 // sendAndWait pushes a message onto the inbound bus and blocks until the agent
 // publishes the final reply (or ctx is cancelled).
-func sendAndWait(ctx context.Context, msgBus bus.Bus, channel, chatId, content string) {
-	msgBus.PublishInbound(bus.NewInboundMessage(channel, "user", chatId, content))
+func sendAndWait(ctx context.Context, msgBus bus.Bus, channel bus.ChannelType, chatId, content string) {
+	msgBus.PublishInbound(bus.NewInboundMessage(channel, "user", chatId, content, ""))
 
 	doneCh := make(chan struct{})
 	go func() {
 		defer close(doneCh)
 		for {
 			select {
-			case msg := <-msgBus.OutboundChan():
+			case msg := <-msgBus.SubscribeOutbound():
 				if prog, _ := msg.Metadata()["_progress"].(bool); prog {
 					fmt.Printf("  ↳ %s\n", msg.Content())
 					continue
@@ -169,9 +171,9 @@ func printResponse(text string) {
 	fmt.Printf("\n%s crystaldolphin\n%s\n\n", logo, text)
 }
 
-func parseSessionKey(key string) (channel, chatID string) {
+func parseRoutingKey(key string) (channel bus.ChannelType, chatID string) {
 	if i := strings.Index(key, ":"); i >= 0 {
-		return key[:i], key[i+1:]
+		return bus.ChannelType(key[:i]), key[i+1:]
 	}
-	return "cli", key
+	return bus.ChannelCLI, key
 }

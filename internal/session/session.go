@@ -9,30 +9,28 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
-type SessionKey string
-
 // ChannelSessionImpl holds one conversation's messages and metadata.
 type ChannelSessionImpl struct {
-	Key              string
-	Entries          schema.Messages
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-	Metadata         map[string]any
-	lastConsolidated int // number of messages already consolidated to MEMORY.md/HISTORY.md
+	Key           string
+	Entries       schema.Messages
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	Metadata      map[string]any
+	lastCompacted int
 
 	mu sync.Mutex
 }
 
 // newSession constructs a Session with all fields set, including the unexported
-// lastConsolidated counter. Used only by the manager when loading from disk.
-func newSession(key string, messages schema.Messages, createdAt, updatedAt time.Time, meta map[string]any, lastConsolidated int) schema.ChannelSession {
+// lastCompacted counter. Used only by the manager when loading from disk.
+func newSession(key string, messages schema.Messages, createdAt, updatedAt time.Time, meta map[string]any, lastCompacted int) schema.ChannelSession {
 	return &ChannelSessionImpl{
-		Key:              key,
-		Entries:          messages,
-		CreatedAt:        createdAt,
-		UpdatedAt:        updatedAt,
-		Metadata:         meta,
-		lastConsolidated: lastConsolidated,
+		Key:           key,
+		Entries:       messages,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+		Metadata:      meta,
+		lastCompacted: lastCompacted,
 	}
 }
 
@@ -103,14 +101,14 @@ func (s *ChannelSessionImpl) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.Entries = schema.NewMessages()
-	s.lastConsolidated = 0
+	s.lastCompacted = 0
 	s.UpdatedAt = time.Now()
 }
 
-// LastConsolidated returns the consolidation pointer.
+// LastCompacted returns the consolidation pointer.
 // Caller must hold s.mu.
-func (s *ChannelSessionImpl) LastConsolidated() int {
-	return s.lastConsolidated
+func (s *ChannelSessionImpl) LastCompacted() int {
+	return s.lastCompacted
 }
 
 // Compact updates the consolidation cursor after a successful run.
@@ -118,7 +116,7 @@ func (s *ChannelSessionImpl) LastConsolidated() int {
 // Must only be called from the consolidation goroutine (never concurrently).
 func (s *ChannelSessionImpl) Compact(archive bool, keepCount int) {
 	if archive {
-		s.lastConsolidated = 0
+		s.lastCompacted = 0
 		s.UpdatedAt = time.Now()
 		s.Entries = schema.NewMessages()
 	} else {
@@ -129,17 +127,17 @@ func (s *ChannelSessionImpl) Compact(archive bool, keepCount int) {
 		tail := make([]schema.Message, keepCount)
 		copy(tail, msgs[len(msgs)-keepCount:])
 		s.Entries.Messages = tail
-		s.lastConsolidated = 0
+		s.lastCompacted = 0
 		s.UpdatedAt = time.Now()
 	}
 }
 
-// ConsolidatedMessages returns the slice of messages eligible for consolidation and
+// CompactedMessages returns the slice of messages eligible for consolidation and
 // true, or an empty Messages and false when there is nothing to do.
 // Must only be called from the consolidation goroutine (never concurrently).
-func (s *ChannelSessionImpl) ConsolidatedMessages(archive bool, memWindow, keepCount int) (schema.Messages, bool) {
+func (s *ChannelSessionImpl) CompactedMessages(archive bool, memWindow, keepCount int) (schema.Messages, bool) {
 	msgs := s.Entries.Messages
-	lastConsolidated := s.lastConsolidated
+	lastConsolidated := s.lastCompacted
 
 	if archive {
 		slog.Info("memory consolidation (archive_all)", "messages", len(msgs))

@@ -327,7 +327,7 @@ func TestExecuteJob_CallsOnJob(t *testing.T) {
 	m, _ := newTestManager(t)
 
 	var called atomic.Int32
-	m.OnJobStart(func(_ context.Context, job CronJob) (string, error) {
+	m.OnJobFunc(func(_ context.Context, job CronJob) (string, error) {
 		called.Add(1)
 		return "ok", nil
 	})
@@ -353,7 +353,7 @@ func TestExecuteJob_CallsOnJob(t *testing.T) {
 
 func TestExecuteJob_UpdatesState(t *testing.T) {
 	m, _ := newTestManager(t)
-	m.OnJobStart(func(_ context.Context, _ CronJob) (string, error) { return "done", nil })
+	m.OnJobFunc(func(_ context.Context, _ CronJob) (string, error) { return "done", nil })
 
 	id, _ := m.AddJob("state", "msg", "every", 10000, "", "", 0, false, "", "", false)
 	cancel := startManager(t, m)
@@ -378,7 +378,7 @@ func TestExecuteJob_UpdatesState(t *testing.T) {
 
 func TestExecuteJob_AtDeleteAfterRun(t *testing.T) {
 	m, _ := newTestManager(t)
-	m.OnJobStart(func(_ context.Context, _ CronJob) (string, error) { return "", nil })
+	m.OnJobFunc(func(_ context.Context, _ CronJob) (string, error) { return "", nil })
 
 	futureMs := time.Now().Add(time.Hour).UnixMilli()
 	id, _ := m.AddJob("once", "msg", "at", 0, "", "", futureMs, false, "", "", true)
@@ -422,7 +422,7 @@ func TestEveryJob_FiresAfterInterval(t *testing.T) {
 	m, _ := newTestManager(t)
 
 	var count atomic.Int32
-	m.OnJobStart(func(_ context.Context, _ CronJob) (string, error) {
+	m.OnJobFunc(func(_ context.Context, _ CronJob) (string, error) {
 		count.Add(1)
 		return "", nil
 	})
@@ -441,7 +441,7 @@ func TestAtJob_FiresOnce(t *testing.T) {
 	m, _ := newTestManager(t)
 
 	var count atomic.Int32
-	m.OnJobStart(func(_ context.Context, _ CronJob) (string, error) {
+	m.OnJobFunc(func(_ context.Context, _ CronJob) (string, error) {
 		count.Add(1)
 		return "", nil
 	})

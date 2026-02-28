@@ -60,7 +60,7 @@ func (t *MessageTool) Execute(ctx context.Context, params map[string]any) (strin
 
 	channel := tc.Channel
 	if ch, ok := params["channel"].(string); ok && ch != "" {
-		channel = ch
+		channel = bus.ChannelType(ch)
 	}
 	chatID := tc.ChatID
 	if cid, ok := params["chat_id"].(string); ok && cid != "" {

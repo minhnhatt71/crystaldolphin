@@ -22,6 +22,7 @@ import (
 
 	robfigcron "github.com/robfig/cron/v3"
 
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
@@ -98,9 +99,9 @@ func NewService(storePath string) *JobManager {
 	}
 }
 
-// OnJobStart registers the callback executed when a job fires.
+// OnJobFunc registers the callback executed when a job fires.
 // Must be set before Start().
-func (s *JobManager) OnJobStart(fn OnJobFunc) { s.onJob = fn }
+func (s *JobManager) OnJobFunc(fn OnJobFunc) { s.onJob = fn }
 
 // Start loads jobs from disk, (re)computes next-run times, and arms all timers.
 // Blocks until ctx is cancelled.
@@ -134,7 +135,7 @@ func (s *JobManager) Start(ctx context.Context) error {
 func (s *JobManager) AddJob(
 	name, message, kind string,
 	everyMs int64, cronExpr, tz string, atMs int64,
-	deliver bool, channel, to string, deleteAfterRun bool,
+	deliver bool, channel bus.ChannelType, to string, deleteAfterRun bool,
 ) (string, error) {
 	sched := CronSchedule{Kind: kind}
 	switch kind {
@@ -158,7 +159,8 @@ func (s *JobManager) AddJob(
 	}
 
 	if channel != "" {
-		payload.Channel = &channel
+		ch := string(channel)
+		payload.Channel = &ch
 	}
 	if to != "" {
 		payload.To = &to
@@ -256,7 +258,7 @@ func (s *JobManager) ListAllJobs(includeDisabled bool) []CronJob {
 // AddJobFull is the CLI-level add (takes a fully-formed CronJob minus ID/times).
 func (s *JobManager) AddJobFull(name, message, kind string, everyMs int64, cronExpr, tz string, atMs int64,
 	deliver bool, channel, to string, deleteAfterRun bool) (CronJob, error) {
-	id, err := s.AddJob(name, message, kind, everyMs, cronExpr, tz, atMs, deliver, channel, to, deleteAfterRun)
+	id, err := s.AddJob(name, message, kind, everyMs, cronExpr, tz, atMs, deliver, bus.ChannelType(channel), to, deleteAfterRun)
 	if err != nil {
 		return CronJob{}, err
 	}

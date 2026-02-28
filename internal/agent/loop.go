@@ -69,7 +69,7 @@ func (loop *AgentLoop) Run(ctx context.Context) error {
 
 	for {
 		select {
-		case msg := <-loop.bus.InboundChan():
+		case msg := <-loop.bus.SubscribeInbound():
 			go loop.handleMessage(ctx, msg)
 		case <-ctx.Done():
 			slog.Info("Agent loop stopping")
@@ -81,10 +81,9 @@ func (loop *AgentLoop) Run(ctx context.Context) error {
 
 // ProcessDirect handles a message outside the bus (CLI, cron).
 // Returns the final text response.
-func (loop *AgentLoop) ProcessDirect(ctx context.Context, content, sessKey, channel, chatID string) string {
-	msg := bus.NewInboundMessage(channel, "user", chatID, content)
-	res := loop.processMessage(ctx, msg, sessKey)
-	if res == nil {
+func (loop *AgentLoop) ProcessDirect(ctx context.Context, msg bus.InboundMessage) string {
+	var res *bus.OutboundMessage
+	if res = loop.routeMessage(ctx, msg); res == nil {
 		return ""
 	}
 
@@ -92,7 +91,7 @@ func (loop *AgentLoop) ProcessDirect(ctx context.Context, content, sessKey, chan
 }
 
 func (loop *AgentLoop) handleMessage(ctx context.Context, msg bus.InboundMessage) {
-	resp := loop.processMessage(ctx, msg, "")
+	resp := loop.routeMessage(ctx, msg)
 
 	if resp != nil {
 		loop.bus.PublishOutbound(*resp)
@@ -104,29 +103,19 @@ func (loop *AgentLoop) handleMessage(ctx context.Context, msg bus.InboundMessage
 	}
 }
 
-// processMessage is a thin adapter kept for ProcessDirect compatibility.
-func (loop *AgentLoop) processMessage(
-	ctx context.Context,
-	msg bus.InboundMessage,
-	sessionKeyOverride string,
-) *bus.OutboundMessage {
-	return loop.routeMessage(ctx, msg, sessionKeyOverride)
-}
-
 // routeMessage dispatches msg to the appropriate channel-kind handler.
-// sessionKeyOverride is non-empty only when called from ProcessDirect.
-func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.InboundMessage, sessionKeyOverride string) *bus.OutboundMessage {
-	switch bus.ChannelType(msg.Channel()) {
+func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+	switch msg.Channel() {
 	case bus.ChannelSystem:
 		return loop.handleSystemChannel(ctx, msg)
 	case bus.ChannelCLI:
-		return loop.handleCLIChannel(ctx, msg, sessionKeyOverride)
+		return loop.handleCLIChannel(ctx, msg)
 	case bus.ChannelCron:
-		return loop.handleCronChannel(ctx, msg, sessionKeyOverride)
+		return loop.handleCronChannel(ctx, msg)
 	case bus.ChannelHeartbeat:
-		return loop.handleHeartbeatChannel(ctx, msg, sessionKeyOverride)
+		return loop.handleHeartbeatChannel(ctx, msg)
 	default:
-		return loop.handleExternalChannel(ctx, msg, sessionKeyOverride)
+		return loop.handleExternalChannel(ctx, msg)
 	}
 }
 
@@ -134,15 +123,16 @@ func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.InboundMessage,
 // It parses the original channel/chat from msg.ChatId, runs one LLM summarisation
 // turn, and routes the reply to the original chat.
 func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
-	channel, chatId, _ := strings.Cut(msg.ChatId(), ":")
+	channelStr, chatId, _ := strings.Cut(msg.ChatId(), ":")
 	if chatId == "" {
-		channel = "cli"
+		channelStr = "cli"
 		chatId = msg.ChatId()
 	}
+	channel := bus.ChannelType(channelStr)
 
 	slog.Info("Processing system message", "sender", msg.SenderId())
 
-	key := channel + ":" + chatId
+	key := channelStr + ":" + chatId
 	sess := loop.sessions.GetOrCreate(key)
 
 	ctx = tools.WithTurn(ctx, tools.TurnContext{Channel: channel, ChatID: chatId})
@@ -169,20 +159,25 @@ func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.InboundM
 // handleCLIChannel handles messages arriving on the CLI channel.
 // The full pipeline is identical to external channels; the CLI-specific
 // empty-outbound signal (when MessageTool fired) is handled in handleMessage.
-func (loop *AgentLoop) handleCLIChannel(ctx context.Context, msg bus.InboundMessage, sessionKeyOverride string) *bus.OutboundMessage {
-	return loop.handleExternalChannel(ctx, msg, sessionKeyOverride)
+func (loop *AgentLoop) handleCLIChannel(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+	return loop.handleExternalChannel(ctx, msg)
 }
 
-// handleCronChannel handles messages arriving on cron or heartbeat channels.
-// These channels always use ProcessDirect (bypassing the bus); if a message
+// handleCronChannel handles messages arriving on the cron channel.
+// Cron always uses ProcessDirect (bypassing the bus); if a message
 // somehow arrives on the bus the pipeline runs but no outbound is published.
-func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg bus.InboundMessage, sessionKeyOverride string) *bus.OutboundMessage {
-	loop.handleExternalChannel(ctx, msg, sessionKeyOverride)
+func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+	loop.handleExternalChannel(ctx, msg)
+
 	return nil
 }
 
-func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.InboundMessage, sessionKeyOverride string) *bus.OutboundMessage {
-	loop.handleExternalChannel(ctx, msg, sessionKeyOverride)
+// handleHeartbeatChannel handles messages arriving on the heartbeat channel.
+// Heartbeat always uses ProcessDirect (bypassing the bus); if a message
+// somehow arrives on the bus the pipeline runs but no outbound is published.
+func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+	loop.handleExternalChannel(ctx, msg)
+
 	return nil
 }
 
@@ -190,7 +185,7 @@ func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.Inbou
 // (telegram, discord, slack, whatsapp, feishu, dingtalk, email, mochat, qq).
 // It runs slash commands, the full LLM loop, saves the session, and returns
 // an OutboundMessage — or nil if the message tool already sent the reply.
-func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.InboundMessage, sessionKeyOverride string) *bus.OutboundMessage {
+func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
 	slog.Info(
 		"Processing message",
 		"sender", msg.SenderId(),
@@ -198,7 +193,7 @@ func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.Inboun
 		"content", llmutils.Truncate(msg.Content(), 80),
 	)
 
-	key := llmutils.StringOrDefault(sessionKeyOverride, msg.SessionKey())
+	key := msg.RoutingKey()
 	ses := loop.sessions.GetOrCreate(key)
 
 	if resp := loop.handleSlashCommand(msg, ses, key); resp != nil {
@@ -217,8 +212,8 @@ func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.Inboun
 		msg.ChatId(),
 	)
 
-	coreAgent := loop.factory.NewCoreAgent()
-	final, toolsUsed := coreAgent.Execute(ctx, conversation, loop.makeProgressCallback(msg))
+	core := loop.factory.NewCoreAgent()
+	final, toolsUsed := core.Execute(ctx, conversation, loop.progressCallback(msg))
 	if final == "" {
 		final = "I've completed processing but have no response to give."
 	}
@@ -299,9 +294,9 @@ func (loop *AgentLoop) withTurnContext(ctx context.Context, msg bus.InboundMessa
 	return ctx, msgSent
 }
 
-// makeProgressCallback returns a function that pushes intermediate output to
+// progressCallback returns a function that pushes intermediate output to
 // the outbound bus so clients can display streaming progress.
-func (loop *AgentLoop) makeProgressCallback(msg bus.InboundMessage) func(string) {
+func (loop *AgentLoop) progressCallback(msg bus.InboundMessage) func(string) {
 	return func(content string) {
 		meta := map[string]any{"_progress": true}
 		for k, v := range msg.Metadata() {

@@ -80,7 +80,7 @@ func (m *Manager) Save(s *ChannelSessionImpl) error {
 		"created_at":        s.CreatedAt.UTC().Format(time.RFC3339),
 		"updated_at":        time.Now().UTC().Format(time.RFC3339),
 		"metadata":          s.Metadata,
-		"last_consolidated": s.LastConsolidated(),
+		"last_consolidated": s.LastCompacted(),
 	}
 	s.mu.Unlock()
 
@@ -103,13 +103,15 @@ func (m *Manager) Save(s *ChannelSessionImpl) error {
 	return nil
 }
 
-// SaveConsolidated implements schema.SessionSaver for use by memory consolidation.
+// SaveCompacted implements schema.SessionSaver for use by memory consolidation.
 // It casts the ConsolidatableSession back to *Session and delegates to Save.
-func (m *Manager) SaveConsolidated(s schema.ChannelSession) error {
+func (m *Manager) SaveCompacted(s schema.ChannelSession) error {
 	sess, ok := s.(*ChannelSessionImpl)
+
 	if !ok {
-		return fmt.Errorf("session.Manager.SaveConsolidated: unexpected type %T", s)
+		return fmt.Errorf("session.Manager.SaveCompacted: unexpected type %T", s)
 	}
+
 	return m.Save(sess)
 }
 

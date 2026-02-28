@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
@@ -193,16 +194,19 @@ var cronRunCmd = &cobra.Command{
 		loop := c.AgentLoop()
 
 		svc := cron.NewService(cronStorePath())
-		svc.OnJobStart(func(ctx context.Context, job cron.CronJob) (string, error) {
-			ch := "cli"
+		svc.OnJobFunc(func(ctx context.Context, job cron.CronJob) (string, error) {
+			ch := bus.ChannelCLI
 			chatID := "direct"
 			if job.Payload.Channel != nil {
-				ch = *job.Payload.Channel
+				ch = bus.ChannelType(*job.Payload.Channel)
 			}
 			if job.Payload.To != nil {
 				chatID = *job.Payload.To
 			}
-			resp := loop.ProcessDirect(ctx, job.Payload.Message, "cron:"+job.ID, ch, chatID)
+
+			msg := bus.NewInboundMessage(ch, bus.SenderIdCLI, chatID, job.Payload.Message, "cron:"+job.ID)
+			resp := loop.ProcessDirect(ctx, msg)
+
 			if resp != "" {
 				printResponse(resp)
 			}

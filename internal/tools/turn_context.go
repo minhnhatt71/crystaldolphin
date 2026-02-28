@@ -1,12 +1,16 @@
 package tools
 
-import "context"
+import (
+	"context"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+)
 
 // TurnContext carries per-turn routing metadata through the context tree.
 // It is set by the agent loop once per message and read by stateful tools
 // (message, spawn, cron) inside Execute
 type TurnContext struct {
-	Channel string
+	Channel bus.ChannelType
 	ChatID  string
 	MsgID   string
 

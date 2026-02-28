@@ -1,6 +1,10 @@
 package schema
 
-import "context"
+import (
+	"context"
+
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+)
 
 type Task struct {
 	id          string
@@ -23,5 +27,5 @@ func (t Task) Description() string { return t.description }
 // Spawner is the interface the spawn tool uses to create background subagents.
 // Implemented by agent.SubagentManager. Defined here to avoid an import cycle.
 type Spawner interface {
-	Spawn(ctx context.Context, task, label, originChannel, originChatID string) (string, error)
+	Spawn(ctx context.Context, task, label string, originChannel bus.ChannelType, originChatID string) (string, error)
 }
