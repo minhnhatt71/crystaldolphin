@@ -49,19 +49,27 @@ func runAgent(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	channel, chatId := bus.ParseRoutingKey(key)
+	ch, chatId := bus.ParseRoutingKey(key)
 
 	loop := container.AgentLoop()
 
 	if message != "" {
-		return runSingleMessage(loop, key, channel, chatId)
+		return runSingleMessage(loop, key, ch, chatId)
 	}
 
-	return runInteractive(loop, container.AgentBus(), container.ConsoleBus())
+	manager := channels.NewManager(
+		cfg,
+		container.AgentBus(),
+		container.ChannelBus(),
+		container.ConsoleBus(),
+	)
+
+	return runInteractive(loop, manager)
 }
 
 // runSingleMessage sends one message to the agent and prints the response.
 func runSingleMessage(loop schema.AgentLooper, key string, channel bus.Channel, chatId string) error {
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -77,7 +85,7 @@ func runSingleMessage(loop schema.AgentLooper, key string, channel bus.Channel, 
 }
 
 // runInteractive starts the agent loop and delegates the REPL to CLIChannel.
-func runInteractive(loop schema.AgentLooper, inbound *bus.AgentBus, console *bus.ConsoleBus) error {
+func runInteractive(loop schema.AgentLooper, manager *channels.Manager) error {
 	fmt.Printf("%s Interactive mode (type 'exit' or Ctrl+C to quit)\n\n", logo)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -87,9 +95,7 @@ func runInteractive(loop schema.AgentLooper, inbound *bus.AgentBus, console *bus
 
 	go func() { _ = loop.Run(ctx) }()
 
-	cli := channels.NewCLIChannel(inbound, console)
-
-	return cli.Start(ctx)
+	return manager.Start(context.Background(), "cli")
 }
 
 // registerUserSignals cancels ctx on SIGINT or SIGTERM and exits.

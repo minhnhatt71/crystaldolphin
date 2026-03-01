@@ -89,7 +89,7 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	if err := d.Provide(newMemoryStore); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newConsolidator); err != nil {
+	if err := d.Provide(newCompactor); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newSkillsLoader); err != nil {
@@ -198,12 +198,12 @@ func newSubAgentToolRegistry(cfg *config.Config) SubagentRegistry {
 	}
 
 	registry := tools.NewRegistryBuilder().
-		WithTool(tools.NewReadFileTool(workspace, allowedDir)).
-		WithTool(tools.NewWriteFileTool(workspace, allowedDir)).
-		WithTool(tools.NewEditFileTool(workspace, allowedDir)).
-		WithTool(tools.NewExecTool(workspace, cfg.Tools.Exec.Timeout, cfg.Tools.RestrictToWorkspace)).
-		WithTool(tools.NewWebSearchTool(cfg.Tools.Web.Search.APIKey, cfg.Tools.Web.Search.MaxResults)).
-		WithTool(tools.NewWebFetchTool(0)).
+		Tool(tools.NewReadFileTool(workspace, allowedDir)).
+		Tool(tools.NewWriteFileTool(workspace, allowedDir)).
+		Tool(tools.NewEditFileTool(workspace, allowedDir)).
+		Tool(tools.NewExecTool(workspace, cfg.Tools.Exec.Timeout, cfg.Tools.RestrictToWorkspace)).
+		Tool(tools.NewWebSearchTool(cfg.Tools.Web.Search.APIKey, cfg.Tools.Web.Search.MaxResults)).
+		Tool(tools.NewWebFetchTool(0)).
 		Build()
 
 	return SubagentRegistry{registry}
@@ -223,6 +223,7 @@ func newAgentFactory(
 		cfg.Agents.Defaults.MaxTokens,
 		cfg.Agents.Defaults.MemoryWindow,
 	)
+
 	subSettings := schema.NewAgentSettings(
 		string(m),
 		15,
@@ -230,7 +231,8 @@ func newAgentFactory(
 		cfg.Agents.Defaults.MaxTokens,
 		0,
 	)
-	return agent.NewAgentFactory(p, coreSettings, subSettings, subReg.Registry, mcpMgr, cfg.WorkspacePath())
+
+	return agent.NewFactory(p, coreSettings, subSettings, subReg.Registry, mcpMgr, cfg.WorkspacePath())
 }
 
 func newSubagentManager(factory *agent.AgentFactory, inbound *bus.AgentBus) *agent.SubagentManager {
@@ -251,17 +253,17 @@ func newAgentRegistry(
 	}
 
 	registry := tools.NewRegistryBuilder().
-		WithTool(tools.NewReadFileTool(workspace, allowedDir)).
-		WithTool(tools.NewWriteFileTool(workspace, allowedDir)).
-		WithTool(tools.NewEditFileTool(workspace, allowedDir)).
-		WithTool(tools.NewListDirTool(workspace, allowedDir)).
-		WithTool(tools.NewExecTool(workspace, cfg.Tools.Exec.Timeout, cfg.Tools.RestrictToWorkspace)).
-		WithTool(tools.NewWebSearchTool(cfg.Tools.Web.Search.APIKey, cfg.Tools.Web.Search.MaxResults)).
-		WithTool(tools.NewWebFetchTool(0)).
-		WithTool(tools.NewMessageTool(outbound)).
-		WithTool(tools.NewSpawnTool(subMgr)).
-		WithTool(tools.NewCronTool(cronMgr)).
-		WithTool(tools.NewSaveMemoryTool(mem)).
+		Tool(tools.NewReadFileTool(workspace, allowedDir)).
+		Tool(tools.NewWriteFileTool(workspace, allowedDir)).
+		Tool(tools.NewEditFileTool(workspace, allowedDir)).
+		Tool(tools.NewListDirTool(workspace, allowedDir)).
+		Tool(tools.NewExecTool(workspace, cfg.Tools.Exec.Timeout, cfg.Tools.RestrictToWorkspace)).
+		Tool(tools.NewWebSearchTool(cfg.Tools.Web.Search.APIKey, cfg.Tools.Web.Search.MaxResults)).
+		Tool(tools.NewWebFetchTool(0)).
+		Tool(tools.NewMessageTool(outbound)).
+		Tool(tools.NewSpawnTool(subMgr)).
+		Tool(tools.NewCronTool(cronMgr)).
+		Tool(tools.NewSaveMemoryTool(mem)).
 		Build()
 
 	return AgentRegistry{registry}
@@ -275,7 +277,7 @@ func newMemoryStore(cfg *config.Config) (schema.MemoryStore, error) {
 	return mem, nil
 }
 
-func newConsolidator(cfg *config.Config, mem schema.MemoryStore, saver *session.Manager, p schema.LLMProvider, m LLMModel, reg AgentRegistry) schema.MemoryCompactor {
+func newCompactor(cfg *config.Config, mem schema.MemoryStore, saver *session.Manager, p schema.LLMProvider, m LLMModel, reg AgentRegistry) schema.MemoryCompactor {
 	return agent.NewCompactor(mem, saver, p, string(m), cfg.Agents.Defaults.MemoryWindow, reg.Registry)
 }
 
@@ -294,7 +296,6 @@ func newMCPManager(cfg *config.Config) *mcp.Manager {
 func newAgentLoop(
 	inbound *bus.AgentBus,
 	outbound *bus.ChannelBus,
-	console *bus.ConsoleBus,
 	factory *agent.AgentFactory,
 	cfg *config.Config,
 	m LLMModel,
@@ -312,5 +313,5 @@ func newAgentLoop(
 		cfg.Agents.Defaults.MemoryWindow,
 	)
 
-	return agent.NewAgentLoop(inbound, outbound, console, factory, settings, sessions, consolidator, reg.Registry, subMgr, cb)
+	return agent.NewAgentLoop(inbound, outbound, factory, settings, sessions, consolidator, reg.Registry, subMgr, cb)
 }

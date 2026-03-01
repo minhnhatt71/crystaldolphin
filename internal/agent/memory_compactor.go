@@ -38,7 +38,7 @@ type MemoryCompactor struct {
 // from reg; if absent it falls back to constructing one directly from store.
 func NewCompactor(store schema.MemoryStore, saver schema.SessionSaver, provider schema.LLMProvider, model string, memoryWindow int, reg *tools.Registry) *MemoryCompactor {
 	registry := tools.NewRegistryBuilder().
-		WithTool(tools.NewSaveMemoryTool(store)).
+		Tool(tools.NewSaveMemoryTool(store)).
 		Build()
 
 	return &MemoryCompactor{

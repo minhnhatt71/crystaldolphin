@@ -2,6 +2,7 @@ package channels
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
@@ -84,6 +85,29 @@ func (m *Manager) EnabledChannels() []string {
 		names = append(names, n)
 	}
 	return names
+}
+
+func (m *Manager) Start(ctx context.Context, name string) error {
+	ch, ok := m.channels[name]
+	if !ok {
+		slog.Error("attempted to start unknown channel", "name", name)
+		return fmt.Errorf("unknown channel: %s", name)
+	}
+
+	slog.Info("starting channel", "name", name)
+
+	go m.dispatchOutbound(ctx)
+
+	go func() {
+		slog.Info("starting channel", "name", name)
+		if err := ch.Start(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("channel exited with error", "name", name, "err", err)
+		}
+	}()
+
+	<-ctx.Done()
+
+	return ctx.Err()
 }
 
 // StartAll starts all channels concurrently and dispatches outbound messages.

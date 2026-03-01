@@ -13,8 +13,8 @@ func NewRegistryBuilder() *RegistryBuilder {
 	return &RegistryBuilder{tools: make(map[string]schema.Tool)}
 }
 
-// WithTool adds a tool and returns the builder, enabling chaining.
-func (b *RegistryBuilder) WithTool(tool schema.Tool) *RegistryBuilder {
+// Tool adds a tool and returns the builder, enabling chaining.
+func (b *RegistryBuilder) Tool(tool schema.Tool) *RegistryBuilder {
 	b.tools[tool.Name()] = tool
 
 	return b

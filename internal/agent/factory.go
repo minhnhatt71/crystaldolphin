@@ -19,10 +19,10 @@ type AgentFactory struct {
 	workspace   string
 }
 
-// NewAgentFactory constructs an AgentFactory.
+// NewFactory constructs an AgentFactory.
 // subRegistry is the restricted tool registry for SubAgents.
 // The core ToolList is wired after AgentLoop construction via SetCoreTools.
-func NewAgentFactory(
+func NewFactory(
 	provider schema.LLMProvider,
 	settings, subSettings schema.AgentSettings,
 	subRegistry *tools.Registry,

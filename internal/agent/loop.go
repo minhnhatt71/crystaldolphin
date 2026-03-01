@@ -21,7 +21,6 @@ import (
 type AgentLoop struct {
 	agentBus   *bus.AgentBus
 	channelBus *bus.ChannelBus
-	consoleBus *bus.ConsoleBus
 	settings   schema.AgentSettings
 	pctx       *PromptContext
 	sessions   *session.Manager
@@ -38,7 +37,6 @@ type AgentLoop struct {
 func NewAgentLoop(
 	agentBus *bus.AgentBus,
 	channelBus *bus.ChannelBus,
-	consoleBus *bus.ConsoleBus,
 	factory *AgentFactory,
 	settings schema.AgentSettings,
 	sessions *session.Manager,
@@ -50,7 +48,6 @@ func NewAgentLoop(
 	loop := &AgentLoop{
 		agentBus:   agentBus,
 		channelBus: channelBus,
-		consoleBus: consoleBus,
 		settings:   settings,
 		pctx:       promptBuilder,
 		sessions:   sessions,
@@ -103,10 +100,12 @@ func (loop *AgentLoop) consumeMessage(ctx context.Context, msg bus.AgentMessage)
 		out := bus.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), "").
 			Metadata(msg.Metadata()).
 			Build()
+
 		if resp != nil {
 			out = *resp
 		}
-		loop.consoleBus.Publish(out)
+
+		loop.channelBus.Publish(out)
 	} else if resp != nil {
 		loop.channelBus.Publish(*resp)
 	}
@@ -325,10 +324,6 @@ func (loop *AgentLoop) progressCallback(msg bus.AgentMessage) func(string) {
 			Metadata(meta).
 			Build()
 
-		if msg.Channel() == bus.ChannelCLI {
-			loop.consoleBus.Publish(out)
-		} else {
-			loop.channelBus.Publish(out)
-		}
+		loop.channelBus.Publish(out)
 	}
 }
