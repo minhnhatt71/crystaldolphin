@@ -22,13 +22,15 @@ type ServiceContainer struct {
 	provider    schema.LLMProvider
 	inboundBus  *bus.AgentBus
 	outboundBus *bus.ChannelBus
+	consoleBus  *bus.ConsoleBus
 	loop        schema.AgentLooper
 	cronSvc     *cron.JobManager
 }
 
 func (c *ServiceContainer) Provider() schema.LLMProvider  { return c.provider }
-func (c *ServiceContainer) InboundBus() *bus.AgentBus     { return c.inboundBus }
-func (c *ServiceContainer) OutboundBus() *bus.ChannelBus  { return c.outboundBus }
+func (c *ServiceContainer) AgentBus() *bus.AgentBus       { return c.inboundBus }
+func (c *ServiceContainer) ChannelBus() *bus.ChannelBus   { return c.outboundBus }
+func (c *ServiceContainer) ConsoleBus() *bus.ConsoleBus   { return c.consoleBus }
 func (c *ServiceContainer) AgentLoop() schema.AgentLooper { return c.loop }
 func (c *ServiceContainer) CronService() *cron.JobManager { return c.cronSvc }
 
@@ -57,10 +59,13 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	if err := d.Provide(resolveLLMModel); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newInboundBus); err != nil {
+	if err := d.Provide(newAgentBus); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newOutboundBus); err != nil {
+	if err := d.Provide(newChannelBus); err != nil {
+		return nil, err
+	}
+	if err := d.Provide(newConsoleBus); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newSessionManager); err != nil {
@@ -105,6 +110,7 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 		provider schema.LLMProvider,
 		inbound *bus.AgentBus,
 		outbound *bus.ChannelBus,
+		console *bus.ConsoleBus,
 		loop schema.AgentLooper,
 		cronSvc *cron.JobManager,
 	) {
@@ -112,6 +118,7 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 			provider:    provider,
 			inboundBus:  inbound,
 			outboundBus: outbound,
+			consoleBus:  console,
 			loop:        loop,
 			cronSvc:     cronSvc,
 		}
@@ -152,12 +159,16 @@ func isOAuthProvider(name string) bool {
 	return spec != nil && spec.IsOAuth
 }
 
-func newInboundBus() *bus.AgentBus {
+func newAgentBus() *bus.AgentBus {
 	return bus.NewAgentBus(100)
 }
 
-func newOutboundBus() *bus.ChannelBus {
+func newChannelBus() *bus.ChannelBus {
 	return bus.NewChannelBus(100)
+}
+
+func newConsoleBus() *bus.ConsoleBus {
+	return bus.NewConsoleBus(100)
 }
 
 func newSessionManager(cfg *config.Config) (*session.Manager, error) {
@@ -283,6 +294,7 @@ func newMCPManager(cfg *config.Config) *mcp.Manager {
 func newAgentLoop(
 	inbound *bus.AgentBus,
 	outbound *bus.ChannelBus,
+	console *bus.ConsoleBus,
 	factory *agent.AgentFactory,
 	cfg *config.Config,
 	m LLMModel,
@@ -300,5 +312,5 @@ func newAgentLoop(
 		cfg.Agents.Defaults.MemoryWindow,
 	)
 
-	return agent.NewAgentLoop(inbound, outbound, factory, settings, sessions, consolidator, reg.Registry, subMgr, cb)
+	return agent.NewAgentLoop(inbound, outbound, console, factory, settings, sessions, consolidator, reg.Registry, subMgr, cb)
 }

@@ -27,7 +27,7 @@ func NewAgentSettings(model string, maxIter int, temperature float64, maxTokens 
 type AgentLooper interface {
 	// ProcessDirect processes a message outside the bus (CLI, cron, heartbeat).
 	// Returns the final text response.
-	ProcessDirect(ctx context.Context, msg bus.AgentBusMessage) string
+	ProcessDirect(ctx context.Context, msg bus.AgentMessage) string
 	// Run starts the main agent loop,
 	// processing messages from the bus until context is cancelled.
 	Run(ctx context.Context) error

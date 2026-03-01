@@ -21,6 +21,7 @@ import (
 type AgentLoop struct {
 	agentBus   *bus.AgentBus
 	channelBus *bus.ChannelBus
+	consoleBus *bus.ConsoleBus
 	settings   schema.AgentSettings
 	pctx       *PromptContext
 	sessions   *session.Manager
@@ -37,6 +38,7 @@ type AgentLoop struct {
 func NewAgentLoop(
 	agentBus *bus.AgentBus,
 	channelBus *bus.ChannelBus,
+	consoleBus *bus.ConsoleBus,
 	factory *AgentFactory,
 	settings schema.AgentSettings,
 	sessions *session.Manager,
@@ -48,6 +50,7 @@ func NewAgentLoop(
 	loop := &AgentLoop{
 		agentBus:   agentBus,
 		channelBus: channelBus,
+		consoleBus: consoleBus,
 		settings:   settings,
 		pctx:       promptBuilder,
 		sessions:   sessions,
@@ -83,7 +86,7 @@ func (loop *AgentLoop) Run(ctx context.Context) error {
 
 // ProcessDirect handles a message outside the bus (CLI, cron).
 // Returns the final text response.
-func (loop *AgentLoop) ProcessDirect(ctx context.Context, msg bus.AgentBusMessage) string {
+func (loop *AgentLoop) ProcessDirect(ctx context.Context, msg bus.AgentMessage) string {
 	var res *bus.ChannelMessage
 	if res = loop.routeMessage(ctx, msg); res == nil {
 		return ""
@@ -92,21 +95,25 @@ func (loop *AgentLoop) ProcessDirect(ctx context.Context, msg bus.AgentBusMessag
 	return res.Content()
 }
 
-func (loop *AgentLoop) consumeMessage(ctx context.Context, msg bus.AgentBusMessage) {
+func (loop *AgentLoop) consumeMessage(ctx context.Context, msg bus.AgentMessage) {
 	resp := loop.routeMessage(ctx, msg)
 
-	if resp != nil {
+	if msg.Channel() == bus.ChannelCLI {
+		// Route CLI responses to the console bus, not the channel bus.
+		out := bus.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), "").
+			Metadata(msg.Metadata()).
+			Build()
+		if resp != nil {
+			out = *resp
+		}
+		loop.consoleBus.Publish(out)
+	} else if resp != nil {
 		loop.channelBus.Publish(*resp)
-	} else if msg.Channel() == bus.ChannelCLI {
-		// Signal CLI that we're done even when MessageTool was used.
-		out := bus.NewChannelMessage(msg.Channel(), msg.ChatId(), "")
-		out.SetMetadata(msg.Metadata())
-		loop.channelBus.Publish(out)
 	}
 }
 
 // routeMessage dispatches msg to the appropriate channel-kind handler.
-func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
 	switch msg.Channel() {
 	case bus.ChannelSystem:
 		return loop.handleSystemChannel(ctx, msg)
@@ -124,7 +131,7 @@ func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.AgentBusMessage
 // handleSystemChannel processes system-channel messages injected by subagents.
 // It parses the original channel/chat from msg.ChatId, runs one LLM summarisation
 // turn, and routes the reply to the original chat.
-func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
 	channelStr, chatId, _ := strings.Cut(msg.ChatId(), ":")
 	if chatId == "" {
 		channelStr = "cli"
@@ -161,14 +168,14 @@ func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.AgentBus
 // handleCLIChannel handles messages arriving on the CLI channel.
 // The full pipeline is identical to external channels; the CLI-specific
 // empty-outbound signal (when MessageTool fired) is handled in handleMessage.
-func (loop *AgentLoop) handleCLIChannel(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) handleCLIChannel(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
 	return loop.handleExternalChannel(ctx, msg)
 }
 
 // handleCronChannel handles messages arriving on the cron channel.
 // Cron always uses ProcessDirect (bypassing the bus); if a message
 // somehow arrives on the bus the pipeline runs but no outbound is published.
-func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
 	loop.handleExternalChannel(ctx, msg)
 
 	return nil
@@ -177,7 +184,7 @@ func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg bus.AgentBusMe
 // handleHeartbeatChannel handles messages arriving on the heartbeat channel.
 // Heartbeat always uses ProcessDirect (bypassing the bus); if a message
 // somehow arrives on the bus the pipeline runs but no outbound is published.
-func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
 	loop.handleExternalChannel(ctx, msg)
 
 	return nil
@@ -187,7 +194,7 @@ func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.Agent
 // (telegram, discord, slack, whatsapp, feishu, dingtalk, email, mochat, qq).
 // It runs slash commands, the full LLM loop, saves the session, and returns
 // an OutboundMessage — or nil if the message tool already sent the reply.
-func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
 	slog.Info(
 		"Processing message",
 		"sender", msg.SenderId(),
@@ -216,6 +223,17 @@ func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.AgentB
 
 	core := loop.factory.NewCoreAgent()
 	final, toolsUsed := core.Execute(ctx, conversation, loop.progressCallback(msg))
+
+	// If the message tool sent something, suppress the automatic reply.
+	select {
+	case <-msgSentChan:
+		ses.AddUser(msg.Content())
+		ses.AddAssistant(final, toolsUsed)
+		loop.sessions.Save(ses)
+		return nil
+	default:
+	}
+
 	if final == "" {
 		final = "I've completed processing but have no response to give."
 	}
@@ -226,22 +244,17 @@ func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.AgentB
 	ses.AddAssistant(final, toolsUsed)
 	loop.sessions.Save(ses)
 
-	// If the message tool sent something, suppress the automatic reply.
-	select {
-	case <-msgSentChan:
-		return nil
-	default:
-	}
+	out := bus.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), final).
+		Metadata(msg.Metadata()).
+		Build()
 
-	out := bus.NewChannelMessage(msg.Channel(), msg.ChatId(), final)
-	out.SetMetadata(msg.Metadata())
 	return &out
 }
 
 // handleSlashCommand checks msg.Content for a known slash command and handles
 // it. Returns non-nil if the command was handled (caller should return early).
 func (loop *AgentLoop) handleSlashCommand(
-	msg bus.AgentBusMessage,
+	msg bus.AgentMessage,
 	ses *session.ChannelSessionImpl,
 	key string,
 ) *bus.ChannelMessage {
@@ -257,7 +270,7 @@ func (loop *AgentLoop) handleSlashCommand(
 
 // handleCmdNew clears the current session and triggers background memory
 // consolidation, then replies with a confirmation.
-func (loop *AgentLoop) handleCmdNew(msg bus.AgentBusMessage, sess *session.ChannelSessionImpl, key string) *bus.ChannelMessage {
+func (loop *AgentLoop) handleCmdNew(msg bus.AgentMessage, sess *session.ChannelSessionImpl, key string) *bus.ChannelMessage {
 	archived := sess.Messages()
 	sess.Clear()
 	loop.sessions.Save(sess)
@@ -266,22 +279,25 @@ func (loop *AgentLoop) handleCmdNew(msg bus.AgentBusMessage, sess *session.Chann
 	tmp := session.NewArchivedSession(key, archived)
 	loop.compactor.Schedule(key+":archive", tmp, true)
 
-	out := bus.NewChannelMessage(msg.Channel(), msg.ChatId(), "New session started. Memory consolidation in progress.")
-	out.SetMetadata(msg.Metadata())
+	out := bus.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), "New session started. Memory consolidation in progress.").
+		Metadata(msg.Metadata()).
+		Build()
 
 	return &out
 }
 
 // handleCmdHelp returns the help text listing available slash commands.
-func (loop *AgentLoop) handleCmdHelp(msg bus.AgentBusMessage) *bus.ChannelMessage {
-	out := bus.NewChannelMessage(msg.Channel(), msg.ChatId(), "crystaldolphin commands:\n/new — Start a new conversation\n/help — Show available commands")
-	out.SetMetadata(msg.Metadata())
+func (loop *AgentLoop) handleCmdHelp(msg bus.AgentMessage) *bus.ChannelMessage {
+	out := bus.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), "crystaldolphin commands:\n/new — Start a new conversation\n/help — Show available commands").
+		Metadata(msg.Metadata()).
+		Build()
+
 	return &out
 }
 
 // withTurnContext decorates ctx with per-turn routing information and returns
 // a channel that is closed when the message tool has sent a reply.
-func (loop *AgentLoop) withTurnContext(ctx context.Context, msg bus.AgentBusMessage) (context.Context, chan struct{}) {
+func (loop *AgentLoop) withTurnContext(ctx context.Context, msg bus.AgentMessage) (context.Context, chan struct{}) {
 	msgID := ""
 	if v, ok := msg.Metadata()["message_id"].(string); ok {
 		msgID = v
@@ -298,14 +314,21 @@ func (loop *AgentLoop) withTurnContext(ctx context.Context, msg bus.AgentBusMess
 
 // progressCallback returns a function that pushes intermediate output to
 // the outbound bus so clients can display streaming progress.
-func (loop *AgentLoop) progressCallback(msg bus.AgentBusMessage) func(string) {
+func (loop *AgentLoop) progressCallback(msg bus.AgentMessage) func(string) {
 	return func(content string) {
 		meta := map[string]any{"_progress": true}
 		for k, v := range msg.Metadata() {
 			meta[k] = v
 		}
-		out := bus.NewChannelMessage(msg.Channel(), msg.ChatId(), content)
-		out.SetMetadata(meta)
-		loop.channelBus.Publish(out)
+
+		out := bus.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), content).
+			Metadata(meta).
+			Build()
+
+		if msg.Channel() == bus.ChannelCLI {
+			loop.consoleBus.Publish(out)
+		} else {
+			loop.channelBus.Publish(out)
+		}
 	}
 }

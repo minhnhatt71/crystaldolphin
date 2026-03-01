@@ -1,44 +1,20 @@
 package bus
 
-type Channel string
-
-const (
-	ChannelTelegram  Channel = "telegram"
-	ChannelDiscord   Channel = "discord"
-	ChannelSlack     Channel = "slack"
-	ChannelWhatsApp  Channel = "whatsapp"
-	ChannelFeishu    Channel = "feishu"
-	ChannelDingTalk  Channel = "dingtalk"
-	ChannelEmail     Channel = "email"
-	ChannelMochat    Channel = "mochat"
-	ChannelCLI       Channel = "cli"
-	ChannelCron      Channel = "cron"
-	ChannelHeartbeat Channel = "heartbeat"
-	ChannelSystem    Channel = "system"
-)
-
-type ChatId string
-
-const (
-	ChatIdDirect ChatId = "direct"
-)
-
-// AgentBus carries messages from channels → agent.
-// Channel adapters call PublishInbound; the agent loop reads via SubscribeInbound.
+// AgentBus contains messages from channels to be consumed by agents
 type AgentBus struct {
-	ch chan AgentBusMessage
+	channel chan AgentMessage
 }
 
 func NewAgentBus(bufSize int) *AgentBus {
-	return &AgentBus{ch: make(chan AgentBusMessage, bufSize)}
+	return &AgentBus{channel: make(chan AgentMessage, bufSize)}
 }
 
 // Publish delivers a message to the agent bus
-func (b *AgentBus) Publish(msg AgentBusMessage) {
-	b.ch <- msg
+func (b *AgentBus) Publish(msg AgentMessage) {
+	b.channel <- msg
 }
 
 // Subscribe returns a receive-only view of the inbound channel.
-func (b *AgentBus) Subscribe() <-chan AgentBusMessage {
-	return b.ch
+func (b *AgentBus) Subscribe() <-chan AgentMessage {
+	return b.channel
 }

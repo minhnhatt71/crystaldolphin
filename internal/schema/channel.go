@@ -6,10 +6,6 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 )
 
-type ChannelType string
-
-type ChannelKind string
-
 // Channel is the interface every chat-platform adapter must implement.
 type Channel interface {
 	// Name returns the unique channel identifier (e.g. "telegram").

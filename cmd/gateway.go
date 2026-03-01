@@ -66,7 +66,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 	defer removePIDFile()
 
 	agentLoop := svc.AgentLoop()
-	outboundBus := svc.OutboundBus()
+	channelBus := svc.ChannelBus()
 	cronManager := svc.CronService()
 
 	cronManager.OnJobFunc(func(ctx context.Context, job cron.CronJob) (string, error) {
@@ -80,17 +80,17 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 			chatId = *job.Payload.To
 		}
 
-		msg := bus.NewAgentBusMessage(ch, bus.SenderIdCLI, chatId, job.Payload.Message, routingKey)
+		msg := bus.NewAgentMessage(ch, bus.SenderIdCLI, chatId, job.Payload.Message, routingKey)
 		resp := agentLoop.ProcessDirect(ctx, msg)
 		if job.Payload.Deliver && job.Payload.To != nil {
-			outboundBus.Publish(bus.NewChannelMessage(ch, chatId, resp))
+			channelBus.Publish(bus.NewChannelMessage(ch, chatId, resp))
 		}
 		return resp, nil
 	})
 
 	heartbeat := heartbeat.NewService(cfg.WorkspacePath(),
 		func(ctx context.Context, content string) error {
-			agentLoop.ProcessDirect(ctx, bus.NewAgentBusMessage(bus.ChannelHeartbeat, bus.SenderIdCLI, "direct", content, "heartbeat:direct"))
+			agentLoop.ProcessDirect(ctx, bus.NewAgentMessage(bus.ChannelHeartbeat, bus.SenderIdCLI, "direct", content, "heartbeat:direct"))
 			return nil
 		},
 		0,
@@ -102,7 +102,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 
 	g, gctx := errgroup.WithContext(ctx)
 
-	channelManager := channels.NewManager(cfg, svc.InboundBus(), outboundBus)
+	channelManager := channels.NewManager(cfg, svc.AgentBus(), channelBus, svc.ConsoleBus())
 	if enabled := channelManager.EnabledChannels(); len(enabled) > 0 {
 		fmt.Printf("✓ Channels enabled: %s\n", strings.Join(enabled, ", "))
 	} else {

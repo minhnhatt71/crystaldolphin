@@ -114,7 +114,7 @@ Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not men
 		label, status, task, result)
 
 	sm.bus.Publish(
-		bus.NewAgentBusMessage(bus.ChannelSystem, bus.SenderIdSubAgent, string(originChannel)+":"+originChatID, content, ""),
+		bus.NewAgentMessage(bus.ChannelSystem, bus.SenderIdSubAgent, string(originChannel)+":"+originChatID, content, ""),
 	)
 }
 

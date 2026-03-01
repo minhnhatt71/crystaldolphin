@@ -11,16 +11,22 @@ import (
 
 // Manager owns all enabled channels and routes outbound messages.
 type Manager struct {
-	channels map[string]schema.Channel
-	outbound *bus.ChannelBus
+	channels   map[string]schema.Channel
+	channelBus *bus.ChannelBus
 }
 
 // NewManager creates a Manager and initialises all enabled channels.
-func NewManager(cfg *config.Config, inbound *bus.AgentBus, outbound *bus.ChannelBus) *Manager {
+// The CLIChannel is always registered; it uses consoleBus to deliver replies
+// back to the terminal when the gateway is running interactively.
+func NewManager(cfg *config.Config, inbound *bus.AgentBus, outbound *bus.ChannelBus, console *bus.ConsoleBus) *Manager {
 	m := &Manager{
-		channels: make(map[string]schema.Channel),
-		outbound: outbound,
+		channels:   make(map[string]schema.Channel),
+		channelBus: outbound,
 	}
+
+	cli := NewCLIChannel(inbound, console)
+	m.channels[cli.Name()] = cli
+	slog.Info("channel enabled", "name", cli.Name())
 
 	if cfg.Channels.Telegram.Enabled {
 		ch := NewTelegramChannel(&cfg.Channels.Telegram, inbound)
@@ -105,7 +111,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 func (m *Manager) dispatchOutbound(ctx context.Context) {
 	for {
 		select {
-		case msg := <-m.outbound.Subscribe():
+		case msg := <-m.channelBus.Subscribe():
 			ch, ok := m.channels[string(msg.Channel())]
 			if !ok {
 				slog.Debug("unknown channel for outbound message", "channel", msg.Channel())

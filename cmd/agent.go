@@ -1,18 +1,17 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/channels"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
@@ -39,14 +38,6 @@ func init() {
 	agentCmd.Flags().BoolVar(&logs, "logs", false, "Show runtime logs")
 }
 
-var exitCommands = map[string]bool{
-	"exit":  true,
-	"quit":  true,
-	"/exit": true,
-	"/quit": true,
-	":q":    true,
-}
-
 func runAgent(_ *cobra.Command, _ []string) error {
 	cfg, err := config.Load(config.ConfigPath())
 	if err != nil {
@@ -58,18 +49,15 @@ func runAgent(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	routingKey := key
-	channel, chatId := parseRoutingKey(routingKey)
+	channel, chatId := bus.ParseRoutingKey(key)
 
 	loop := container.AgentLoop()
-	inboundBus := container.InboundBus()
-	outboundBus := container.OutboundBus()
 
 	if message != "" {
-		return runSingleMessage(loop, routingKey, channel, chatId)
+		return runSingleMessage(loop, key, channel, chatId)
 	}
 
-	return runInteractive(loop, inboundBus, outboundBus, channel, chatId)
+	return runInteractive(loop, container.AgentBus(), container.ConsoleBus())
 }
 
 // runSingleMessage sends one message to the agent and prints the response.
@@ -77,60 +65,40 @@ func runSingleMessage(loop schema.AgentLooper, key string, channel bus.Channel, 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	message := bus.NewAgentBusMessage(channel, "user", chatId, message, key)
+	msg := bus.NewAgentMessage(channel, "user", chatId, message, key)
 
 	fmt.Fprintf(os.Stderr, "  ↳ thinking...\n")
 
-	res := loop.ProcessDirect(ctx, message)
+	res := loop.ProcessDirect(ctx, msg)
 
 	cmdutils.PrintResponse(res)
 
 	return nil
 }
 
-// runInteractive starts the REPL loop: reads lines from stdin, sends each to
-// the agent via the bus, and waits for each reply before prompting again.
-func runInteractive(loop schema.AgentLooper, inbound *bus.AgentBus, outbound *bus.ChannelBus, channel bus.Channel, chatId string) error {
+// runInteractive starts the agent loop and delegates the REPL to CLIChannel.
+func runInteractive(loop schema.AgentLooper, inbound *bus.AgentBus, console *bus.ConsoleBus) error {
 	fmt.Printf("%s Interactive mode (type 'exit' or Ctrl+C to quit)\n\n", logo)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	listenForSignals(cancel)
+	registerUserSignals(cancel)
 
 	go func() { _ = loop.Run(ctx) }()
 
-	scanner := bufio.NewScanner(os.Stdin)
+	cli := channels.NewCLIChannel(inbound, console)
 
-	for {
-		fmt.Print("You: ")
-
-		if !scanner.Scan() {
-			fmt.Println("\nGoodbye!")
-			return nil
-		}
-
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		if exitCommands[strings.ToLower(line)] {
-			fmt.Println("Goodbye!")
-			return nil
-		}
-
-		sendAndWait(ctx, inbound, outbound, channel, chatId, line)
-	}
+	return cli.Start(ctx)
 }
 
-// listenForSignals cancels ctx on SIGINT or SIGTERM and exits.
-func listenForSignals(cancel context.CancelFunc) {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+// registerUserSignals cancels ctx on SIGINT or SIGTERM and exits.
+func registerUserSignals(cancel context.CancelFunc) {
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		switch <-sigChan {
+		switch <-signalChan {
 		case syscall.SIGINT:
 			fmt.Println("\nGoodbye!")
 			fmt.Println("\nReceived SIGINT, shutting down...")
@@ -142,37 +110,4 @@ func listenForSignals(cancel context.CancelFunc) {
 		cancel()
 		os.Exit(0)
 	}()
-}
-
-// sendAndWait pushes a message onto the inbound bus and blocks until the agent
-// publishes the final reply (or ctx is cancelled).
-func sendAndWait(ctx context.Context, agentbus *bus.AgentBus, chanbus *bus.ChannelBus, channel bus.Channel, chatId, content string) {
-	agentbus.Publish(bus.NewAgentBusMessage(channel, "user", chatId, content, ""))
-
-	doneCh := make(chan struct{})
-	go func() {
-		defer close(doneCh)
-		for {
-			select {
-			case msg := <-chanbus.Subscribe():
-				if prog, _ := msg.Metadata()["_progress"].(bool); prog {
-					fmt.Printf("  ↳ %s\n", msg.Content())
-					continue
-				}
-
-				cmdutils.PrintResponse(msg.Content())
-				return
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	<-doneCh
-}
-
-func parseRoutingKey(key string) (channel bus.Channel, chatID string) {
-	if i := strings.Index(key, ":"); i >= 0 {
-		return bus.Channel(key[:i]), key[i+1:]
-	}
-	return bus.ChannelCLI, key
 }

@@ -11,13 +11,13 @@ import (
 // Base holds common state and helper methods shared by all channels.
 type Base struct {
 	channelName bus.Channel
-	b           *bus.AgentBus
+	agentBus    *bus.AgentBus
 	allowFrom   []string // empty = allow all
 }
 
 // NewBase creates a Base with the given channel name, bus, and allowlist.
 func NewBase(name bus.Channel, b *bus.AgentBus, allowFrom []string) Base {
-	return Base{channelName: name, b: b, allowFrom: allowFrom}
+	return Base{channelName: name, agentBus: b, allowFrom: allowFrom}
 }
 
 // IsAllowed checks whether senderID is on the allowlist.
@@ -59,10 +59,13 @@ func (b *Base) HandleMessage(
 		return
 	}
 
-	msg := bus.NewAgentBusMessage(b.channelName, senderId, chatId, content, "")
-	msg.SetMedia(media)
-	msg.SetMetadata(metadata)
-	b.b.Publish(msg)
+	message := bus.
+		NewAgentMessageBuilder(b.channelName, senderId, chatId, content).
+		Media(media).
+		Metadata(metadata).
+		Build()
+
+	b.agentBus.Publish(message)
 }
 
 // splitMessage splits content into chunks that fit within maxLen,

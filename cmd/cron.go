@@ -205,7 +205,7 @@ var cronRunCmd = &cobra.Command{
 				chatID = *job.Payload.To
 			}
 
-			msg := bus.NewAgentBusMessage(ch, bus.SenderIdCLI, chatID, job.Payload.Message, "cron:"+job.ID)
+			msg := bus.NewAgentMessage(ch, bus.SenderIdCLI, chatID, job.Payload.Message, "cron:"+job.ID)
 			resp := loop.ProcessDirect(ctx, msg)
 
 			cmdutils.PrintResponse(resp)
