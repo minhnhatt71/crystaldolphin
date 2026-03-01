@@ -26,7 +26,7 @@ type TelegramChannel struct {
 }
 
 // NewTelegramChannel creates a TelegramChannel.
-func NewTelegramChannel(cfg *channel.TelegramConfig, b bus.Bus) *TelegramChannel {
+func NewTelegramChannel(cfg *channel.TelegramConfig, b *bus.AgentBus) *TelegramChannel {
 	return &TelegramChannel{
 		Base: NewBase("telegram", b, cfg.AllowFrom),
 		cfg:  cfg,
@@ -165,7 +165,7 @@ func (t *TelegramChannel) sendTypingLoop(ctx context.Context, chatID int64) {
 	}
 }
 
-func (t *TelegramChannel) Send(_ context.Context, msg bus.OutboundMessage) error {
+func (t *TelegramChannel) Send(_ context.Context, msg bus.ChannelMessage) error {
 	if t.bot == nil {
 		return fmt.Errorf("telegram: bot not running")
 	}

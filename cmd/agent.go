@@ -61,24 +61,26 @@ func runAgent(_ *cobra.Command, _ []string) error {
 	channel, chatId := parseRoutingKey(routingKey)
 
 	loop := container.AgentLoop()
-	messageBus := container.MessageBus()
+	inboundBus := container.InboundBus()
+	outboundBus := container.OutboundBus()
 
 	if message != "" {
 		return runSingleMessage(loop, routingKey, channel, chatId)
 	}
 
-	return runInteractive(loop, messageBus, channel, chatId)
+	return runInteractive(loop, inboundBus, outboundBus, channel, chatId)
 }
 
 // runSingleMessage sends one message to the agent and prints the response.
-func runSingleMessage(loop schema.AgentLooper, key string, channel bus.ChannelType, chatId string) error {
+func runSingleMessage(loop schema.AgentLooper, key string, channel bus.Channel, chatId string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	msg := bus.NewInboundMessage(channel, "user", chatId, message, key)
+	message := bus.NewAgentBusMessage(channel, "user", chatId, message, key)
 
 	fmt.Fprintf(os.Stderr, "  ↳ thinking...\n")
-	res := loop.ProcessDirect(ctx, msg)
+
+	res := loop.ProcessDirect(ctx, message)
 
 	printResponse(res)
 	return nil
@@ -86,7 +88,7 @@ func runSingleMessage(loop schema.AgentLooper, key string, channel bus.ChannelTy
 
 // runInteractive starts the REPL loop: reads lines from stdin, sends each to
 // the agent via the bus, and waits for each reply before prompting again.
-func runInteractive(loop schema.AgentLooper, msgBus bus.Bus, channel bus.ChannelType, chatId string) error {
+func runInteractive(loop schema.AgentLooper, inbound *bus.AgentBus, outbound *bus.ChannelBus, channel bus.Channel, chatId string) error {
 	fmt.Printf("%s Interactive mode (type 'exit' or Ctrl+C to quit)\n\n", logo)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -116,7 +118,7 @@ func runInteractive(loop schema.AgentLooper, msgBus bus.Bus, channel bus.Channel
 			return nil
 		}
 
-		sendAndWait(ctx, msgBus, channel, chatId, line)
+		sendAndWait(ctx, inbound, outbound, channel, chatId, line)
 	}
 }
 
@@ -142,15 +144,15 @@ func listenForSignals(cancel context.CancelFunc) {
 
 // sendAndWait pushes a message onto the inbound bus and blocks until the agent
 // publishes the final reply (or ctx is cancelled).
-func sendAndWait(ctx context.Context, msgBus bus.Bus, channel bus.ChannelType, chatId, content string) {
-	msgBus.PublishInbound(bus.NewInboundMessage(channel, "user", chatId, content, ""))
+func sendAndWait(ctx context.Context, agentbus *bus.AgentBus, chanbus *bus.ChannelBus, channel bus.Channel, chatId, content string) {
+	agentbus.Publish(bus.NewAgentBusMessage(channel, "user", chatId, content, ""))
 
 	doneCh := make(chan struct{})
 	go func() {
 		defer close(doneCh)
 		for {
 			select {
-			case msg := <-msgBus.SubscribeOutbound():
+			case msg := <-chanbus.Subscribe():
 				if prog, _ := msg.Metadata()["_progress"].(bool); prog {
 					fmt.Printf("  ↳ %s\n", msg.Content())
 					continue
@@ -171,9 +173,9 @@ func printResponse(text string) {
 	fmt.Printf("\n%s crystaldolphin\n%s\n\n", logo, text)
 }
 
-func parseRoutingKey(key string) (channel bus.ChannelType, chatID string) {
+func parseRoutingKey(key string) (channel bus.Channel, chatID string) {
 	if i := strings.Index(key, ":"); i >= 0 {
-		return bus.ChannelType(key[:i]), key[i+1:]
+		return bus.Channel(key[:i]), key[i+1:]
 	}
 	return bus.ChannelCLI, key
 }

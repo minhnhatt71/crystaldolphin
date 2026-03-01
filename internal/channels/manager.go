@@ -12,58 +12,58 @@ import (
 // Manager owns all enabled channels and routes outbound messages.
 type Manager struct {
 	channels map[string]schema.Channel
-	b        bus.Bus
+	outbound *bus.ChannelBus
 }
 
 // NewManager creates a Manager and initialises all enabled channels.
-func NewManager(cfg *config.Config, b bus.Bus) *Manager {
+func NewManager(cfg *config.Config, inbound *bus.AgentBus, outbound *bus.ChannelBus) *Manager {
 	m := &Manager{
 		channels: make(map[string]schema.Channel),
-		b:        b,
+		outbound: outbound,
 	}
 
 	if cfg.Channels.Telegram.Enabled {
-		ch := NewTelegramChannel(&cfg.Channels.Telegram, b)
+		ch := NewTelegramChannel(&cfg.Channels.Telegram, inbound)
 		m.channels["telegram"] = ch
 		slog.Info("channel enabled", "name", "telegram")
 	}
 	if cfg.Channels.WhatsApp.Enabled {
-		ch := NewWhatsAppChannel(&cfg.Channels.WhatsApp, b)
+		ch := NewWhatsAppChannel(&cfg.Channels.WhatsApp, inbound)
 		m.channels["whatsapp"] = ch
 		slog.Info("channel enabled", "name", "whatsapp")
 	}
 	if cfg.Channels.Discord.Enabled {
-		ch := NewDiscordChannel(&cfg.Channels.Discord, b)
+		ch := NewDiscordChannel(&cfg.Channels.Discord, inbound)
 		m.channels["discord"] = ch
 		slog.Info("channel enabled", "name", "discord")
 	}
 	if cfg.Channels.Slack.Enabled {
-		ch := NewSlackChannel(&cfg.Channels.Slack, b)
+		ch := NewSlackChannel(&cfg.Channels.Slack, inbound)
 		m.channels["slack"] = ch
 		slog.Info("channel enabled", "name", "slack")
 	}
 	if cfg.Channels.Feishu.Enabled {
-		ch := NewFeishuChannel(&cfg.Channels.Feishu, b)
+		ch := NewFeishuChannel(&cfg.Channels.Feishu, inbound)
 		m.channels["feishu"] = ch
 		slog.Info("channel enabled", "name", "feishu")
 	}
 	if cfg.Channels.DingTalk.Enabled {
-		ch := NewDingTalkChannel(&cfg.Channels.DingTalk, b)
+		ch := NewDingTalkChannel(&cfg.Channels.DingTalk, inbound)
 		m.channels["dingtalk"] = ch
 		slog.Info("channel enabled", "name", "dingtalk")
 	}
 	if cfg.Channels.Email.Enabled {
-		ch := NewEmailChannel(&cfg.Channels.Email, b)
+		ch := NewEmailChannel(&cfg.Channels.Email, inbound)
 		m.channels["email"] = ch
 		slog.Info("channel enabled", "name", "email")
 	}
 	if cfg.Channels.Mochat.Enabled {
-		ch := NewMochatChannel(&cfg.Channels.Mochat, b)
+		ch := NewMochatChannel(&cfg.Channels.Mochat, inbound)
 		m.channels["mochat"] = ch
 		slog.Info("channel enabled", "name", "mochat")
 	}
 	if cfg.Channels.QQ.Enabled {
-		ch := NewQQChannel(&cfg.Channels.QQ, b)
+		ch := NewQQChannel(&cfg.Channels.QQ, inbound)
 		m.channels["qq"] = ch
 		slog.Info("channel enabled", "name", "qq")
 	}
@@ -105,7 +105,7 @@ func (m *Manager) StartAll(ctx context.Context) error {
 func (m *Manager) dispatchOutbound(ctx context.Context) {
 	for {
 		select {
-		case msg := <-m.b.SubscribeOutbound():
+		case msg := <-m.outbound.Subscribe():
 			ch, ok := m.channels[string(msg.Channel())]
 			if !ok {
 				slog.Debug("unknown channel for outbound message", "channel", msg.Channel())

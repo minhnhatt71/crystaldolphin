@@ -24,7 +24,7 @@ type EmailChannel struct {
 	seenUID map[uint32]bool
 }
 
-func NewEmailChannel(cfg *channel.EmailConfig, b bus.Bus) *EmailChannel {
+func NewEmailChannel(cfg *channel.EmailConfig, b *bus.AgentBus) *EmailChannel {
 	return &EmailChannel{
 		Base:    NewBase("email", b, cfg.AllowFrom),
 		cfg:     cfg,
@@ -168,7 +168,7 @@ func (e *EmailChannel) poll(ctx context.Context) error {
 	return nil
 }
 
-func (e *EmailChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
+func (e *EmailChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
 	to := msg.ChatId()
 	subject := e.cfg.SubjectPrefix + "Message"
 	if s, ok := msg.Metadata()["subject"].(string); ok && s != "" {

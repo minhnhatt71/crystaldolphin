@@ -28,7 +28,7 @@ type DingTalkChannel struct {
 	tokenExp   time.Time
 }
 
-func NewDingTalkChannel(cfg *channel.DingTalkConfig, b bus.Bus) *DingTalkChannel {
+func NewDingTalkChannel(cfg *channel.DingTalkConfig, b *bus.AgentBus) *DingTalkChannel {
 	return &DingTalkChannel{
 		Base:       NewBase("dingtalk", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -201,7 +201,7 @@ func (d *DingTalkChannel) handleFrame(frame map[string]any) {
 	})
 }
 
-func (d *DingTalkChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
+func (d *DingTalkChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
 	token, err := d.getAccessToken(ctx)
 	if err != nil {
 		return err

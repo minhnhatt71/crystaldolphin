@@ -34,7 +34,7 @@ type DiscordChannel struct {
 	seq        *int
 }
 
-func NewDiscordChannel(cfg *channel.DiscordConfig, b bus.Bus) *DiscordChannel {
+func NewDiscordChannel(cfg *channel.DiscordConfig, b *bus.AgentBus) *DiscordChannel {
 	return &DiscordChannel{
 		Base:       NewBase("discord", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -240,7 +240,7 @@ func (d *DiscordChannel) sendTypingLoop(ctx context.Context, channelID string) {
 	}
 }
 
-func (d *DiscordChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
+func (d *DiscordChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
 	url := discordAPI + "/channels/" + msg.ChatId() + "/messages"
 	chunks := splitMessage(msg.Content(), discordMaxMsgLen)
 	if len(chunks) == 0 {

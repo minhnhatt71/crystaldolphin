@@ -198,13 +198,13 @@ var cronRunCmd = &cobra.Command{
 			ch := bus.ChannelCLI
 			chatID := "direct"
 			if job.Payload.Channel != nil {
-				ch = bus.ChannelType(*job.Payload.Channel)
+				ch = bus.Channel(*job.Payload.Channel)
 			}
 			if job.Payload.To != nil {
 				chatID = *job.Payload.To
 			}
 
-			msg := bus.NewInboundMessage(ch, bus.SenderIdCLI, chatID, job.Payload.Message, "cron:"+job.ID)
+			msg := bus.NewAgentBusMessage(ch, bus.SenderIdCLI, chatID, job.Payload.Message, "cron:"+job.ID)
 			resp := loop.ProcessDirect(ctx, msg)
 
 			if resp != "" {

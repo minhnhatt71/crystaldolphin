@@ -29,7 +29,7 @@ type MochatChannel struct {
 	seenQueue  []string
 }
 
-func NewMochatChannel(cfg *channel.MochatConfig, b bus.Bus) *MochatChannel {
+func NewMochatChannel(cfg *channel.MochatConfig, b *bus.AgentBus) *MochatChannel {
 	return &MochatChannel{
 		Base:       NewBase("mochat", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -166,7 +166,7 @@ func (m *MochatChannel) dispatch(chatID string, msg mochatMsg) {
 	})
 }
 
-func (m *MochatChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
+func (m *MochatChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
 	url := m.cfg.BaseURL + "/api/messages/send"
 	body := map[string]any{
 		"session_id": msg.ChatId(),

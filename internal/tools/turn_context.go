@@ -10,7 +10,7 @@ import (
 // It is set by the agent loop once per message and read by stateful tools
 // (message, spawn, cron) inside Execute
 type TurnContext struct {
-	Channel bus.ChannelType
+	Channel bus.Channel
 	ChatID  string
 	MsgID   string
 

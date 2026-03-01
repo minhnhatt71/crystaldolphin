@@ -19,14 +19,16 @@ import (
 // ServiceContainer holds the resolved core service singletons.
 // Callers use the typed getter methods; they never need to import dig directly.
 type ServiceContainer struct {
-	provider schema.LLMProvider
-	msgBus   bus.Bus
-	loop     schema.AgentLooper
-	cronSvc  *cron.JobManager
+	provider    schema.LLMProvider
+	inboundBus  *bus.AgentBus
+	outboundBus *bus.ChannelBus
+	loop        schema.AgentLooper
+	cronSvc     *cron.JobManager
 }
 
 func (c *ServiceContainer) Provider() schema.LLMProvider  { return c.provider }
-func (c *ServiceContainer) MessageBus() bus.Bus           { return c.msgBus }
+func (c *ServiceContainer) InboundBus() *bus.AgentBus     { return c.inboundBus }
+func (c *ServiceContainer) OutboundBus() *bus.ChannelBus  { return c.outboundBus }
 func (c *ServiceContainer) AgentLoop() schema.AgentLooper { return c.loop }
 func (c *ServiceContainer) CronService() *cron.JobManager { return c.cronSvc }
 
@@ -55,7 +57,10 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	if err := d.Provide(resolveLLMModel); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newMessageBus); err != nil {
+	if err := d.Provide(newInboundBus); err != nil {
+		return nil, err
+	}
+	if err := d.Provide(newOutboundBus); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newSessionManager); err != nil {
@@ -98,15 +103,17 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	var result *ServiceContainer
 	err := d.Invoke(func(
 		provider schema.LLMProvider,
-		msgBus bus.Bus,
+		inbound *bus.AgentBus,
+		outbound *bus.ChannelBus,
 		loop schema.AgentLooper,
 		cronSvc *cron.JobManager,
 	) {
 		result = &ServiceContainer{
-			provider: provider,
-			msgBus:   msgBus,
-			loop:     loop,
-			cronSvc:  cronSvc,
+			provider:    provider,
+			inboundBus:  inbound,
+			outboundBus: outbound,
+			loop:        loop,
+			cronSvc:     cronSvc,
 		}
 	})
 	return result, err
@@ -145,8 +152,12 @@ func isOAuthProvider(name string) bool {
 	return spec != nil && spec.IsOAuth
 }
 
-func newMessageBus() bus.Bus {
-	return bus.NewMessageBus(100)
+func newInboundBus() *bus.AgentBus {
+	return bus.NewAgentBus(100)
+}
+
+func newOutboundBus() *bus.ChannelBus {
+	return bus.NewChannelBus(100)
 }
 
 func newSessionManager(cfg *config.Config) (*session.Manager, error) {
@@ -211,13 +222,13 @@ func newAgentFactory(
 	return agent.NewAgentFactory(p, coreSettings, subSettings, subReg.Registry, mcpMgr, cfg.WorkspacePath())
 }
 
-func newSubagentManager(factory *agent.AgentFactory, b bus.Bus) *agent.SubagentManager {
-	return agent.NewSubagentManager(factory, b)
+func newSubagentManager(factory *agent.AgentFactory, inbound *bus.AgentBus) *agent.SubagentManager {
+	return agent.NewSubagentManager(factory, inbound)
 }
 
 func newAgentRegistry(
 	cfg *config.Config,
-	b bus.Bus,
+	outbound *bus.ChannelBus,
 	subMgr *agent.SubagentManager,
 	cronMgr *cron.JobManager,
 	mem schema.MemoryStore,
@@ -236,7 +247,7 @@ func newAgentRegistry(
 		WithTool(tools.NewExecTool(workspace, cfg.Tools.Exec.Timeout, cfg.Tools.RestrictToWorkspace)).
 		WithTool(tools.NewWebSearchTool(cfg.Tools.Web.Search.APIKey, cfg.Tools.Web.Search.MaxResults)).
 		WithTool(tools.NewWebFetchTool(0)).
-		WithTool(tools.NewMessageTool(b)).
+		WithTool(tools.NewMessageTool(outbound)).
 		WithTool(tools.NewSpawnTool(subMgr)).
 		WithTool(tools.NewCronTool(cronMgr)).
 		WithTool(tools.NewSaveMemoryTool(mem)).
@@ -270,7 +281,8 @@ func newMCPManager(cfg *config.Config) *mcp.Manager {
 }
 
 func newAgentLoop(
-	b bus.Bus,
+	inbound *bus.AgentBus,
+	outbound *bus.ChannelBus,
 	factory *agent.AgentFactory,
 	cfg *config.Config,
 	m LLMModel,
@@ -288,5 +300,5 @@ func newAgentLoop(
 		cfg.Agents.Defaults.MemoryWindow,
 	)
 
-	return agent.NewAgentLoop(b, factory, settings, sessions, consolidator, reg.Registry, subMgr, cb)
+	return agent.NewAgentLoop(inbound, outbound, factory, settings, sessions, consolidator, reg.Registry, subMgr, cb)
 }

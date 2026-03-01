@@ -12,11 +12,11 @@ import (
 // Routing (channel, chat_id, message_id) is read from the TurnContext stored
 // in the context passed to Execute — no mutable per-turn state on the struct.
 type MessageTool struct {
-	bus bus.Bus
+	bus *bus.ChannelBus
 }
 
-// NewMessageTool creates a MessageTool backed by a Bus.
-func NewMessageTool(b bus.Bus) *MessageTool {
+// NewMessageTool creates a MessageTool backed by an OutboundBus.
+func NewMessageTool(b *bus.ChannelBus) *MessageTool {
 	return &MessageTool{bus: b}
 }
 
@@ -60,7 +60,7 @@ func (t *MessageTool) Execute(ctx context.Context, params map[string]any) (strin
 
 	channel := tc.Channel
 	if ch, ok := params["channel"].(string); ok && ch != "" {
-		channel = bus.ChannelType(ch)
+		channel = bus.Channel(ch)
 	}
 	chatID := tc.ChatID
 	if cid, ok := params["chat_id"].(string); ok && cid != "" {
@@ -89,10 +89,10 @@ func (t *MessageTool) Execute(ctx context.Context, params map[string]any) (strin
 		metadata["message_id"] = msgID
 	}
 
-	out := bus.NewOutboundMessage(channel, chatID, content)
+	out := bus.NewChannelMessage(channel, chatID, content)
 	out.SetMedia(media)
 	out.SetMetadata(metadata)
-	t.bus.PublishOutbound(out)
+	t.bus.Publish(out)
 
 	if tc.MessageSent != nil {
 		close(tc.MessageSent)

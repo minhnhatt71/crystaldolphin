@@ -15,7 +15,7 @@ type CronService interface {
 	AddJob(
 		name, message, kind string,
 		everyMs int64, cronExpr, tz string, atMs int64,
-		deliver bool, channel bus.ChannelType, to string, deleteAfterRun bool,
+		deliver bool, channel bus.Channel, to string, deleteAfterRun bool,
 	) (id string, err error)
 	ListJobs() []CronJobSummary
 	RemoveJob(id string) bool

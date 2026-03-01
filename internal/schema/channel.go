@@ -17,5 +17,5 @@ type Channel interface {
 	// Start begins listening for incoming messages; it blocks until ctx is cancelled.
 	Start(ctx context.Context) error
 	// Send delivers an outbound message to the platform.
-	Send(ctx context.Context, msg bus.OutboundMessage) error
+	Send(ctx context.Context, msg bus.ChannelMessage) error
 }

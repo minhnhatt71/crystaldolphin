@@ -141,7 +141,7 @@ func (pb *PromptContext) BuildMessages(
 	history schema.Messages,
 	currentMessage string,
 	media []string,
-	channel bus.ChannelType,
+	channel bus.Channel,
 	chatID string,
 ) schema.Messages {
 	systemPrompt := pb.BuildSystemPrompt()

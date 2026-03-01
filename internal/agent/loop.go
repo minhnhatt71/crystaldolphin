@@ -19,14 +19,14 @@ import (
 // appropriate channel-kind handler, and publishes OutboundMessages.
 // Each inbound message is handled in its own goroutine.
 type AgentLoop struct {
-	bus      bus.Bus
-	settings schema.AgentSettings
-
-	promptBuilder *PromptContext
-	sessions      *session.Manager
-	compactor     schema.MemoryCompactor
-	tools         tools.ToolList // MCP registration target; factory holds &loop.tools
-	subagents     *SubagentManager
+	agentBus   *bus.AgentBus
+	channelBus *bus.ChannelBus
+	settings   schema.AgentSettings
+	pctx       *PromptContext
+	sessions   *session.Manager
+	compactor  schema.MemoryCompactor
+	tools      tools.ToolList // MCP registration target; factory holds &loop.tools
+	subagents  *SubagentManager
 
 	runner  LoopRunner    // shared LLM iteration logic (used by handleSystemChannel)
 	factory *AgentFactory // creates per-request CoreAgent / SubAgent instances
@@ -35,7 +35,8 @@ type AgentLoop struct {
 // NewAgentLoop creates an AgentLoop with the supplied factory, tool registry, and
 // subagent manager.
 func NewAgentLoop(
-	bus bus.Bus,
+	agentBus *bus.AgentBus,
+	channelBus *bus.ChannelBus,
 	factory *AgentFactory,
 	settings schema.AgentSettings,
 	sessions *session.Manager,
@@ -45,15 +46,16 @@ func NewAgentLoop(
 	promptBuilder *PromptContext,
 ) *AgentLoop {
 	loop := &AgentLoop{
-		bus:           bus,
-		settings:      settings,
-		promptBuilder: promptBuilder,
-		sessions:      sessions,
-		compactor:     compactor,
-		tools:         registry.GetAll(),
-		subagents:     subagents,
-		runner:        newLoopRunner(factory.provider, settings),
-		factory:       factory,
+		agentBus:   agentBus,
+		channelBus: channelBus,
+		settings:   settings,
+		pctx:       promptBuilder,
+		sessions:   sessions,
+		compactor:  compactor,
+		tools:      registry.GetAll(),
+		subagents:  subagents,
+		runner:     newLoopRunner(factory.provider, settings),
+		factory:    factory,
 	}
 	// Wire the factory's coreTools pointer to this loop's live ToolList so that
 	// MCP tools added via ConnectOnce are visible to every CoreAgent created by
@@ -69,8 +71,8 @@ func (loop *AgentLoop) Run(ctx context.Context) error {
 
 	for {
 		select {
-		case msg := <-loop.bus.SubscribeInbound():
-			go loop.handleMessage(ctx, msg)
+		case msg := <-loop.agentBus.Subscribe():
+			go loop.consumeMessage(ctx, msg)
 		case <-ctx.Done():
 			slog.Info("Agent loop stopping")
 			loop.factory.Close()
@@ -81,8 +83,8 @@ func (loop *AgentLoop) Run(ctx context.Context) error {
 
 // ProcessDirect handles a message outside the bus (CLI, cron).
 // Returns the final text response.
-func (loop *AgentLoop) ProcessDirect(ctx context.Context, msg bus.InboundMessage) string {
-	var res *bus.OutboundMessage
+func (loop *AgentLoop) ProcessDirect(ctx context.Context, msg bus.AgentBusMessage) string {
+	var res *bus.ChannelMessage
 	if res = loop.routeMessage(ctx, msg); res == nil {
 		return ""
 	}
@@ -90,21 +92,21 @@ func (loop *AgentLoop) ProcessDirect(ctx context.Context, msg bus.InboundMessage
 	return res.Content()
 }
 
-func (loop *AgentLoop) handleMessage(ctx context.Context, msg bus.InboundMessage) {
+func (loop *AgentLoop) consumeMessage(ctx context.Context, msg bus.AgentBusMessage) {
 	resp := loop.routeMessage(ctx, msg)
 
 	if resp != nil {
-		loop.bus.PublishOutbound(*resp)
-	} else if bus.ChannelType(msg.Channel()) == bus.ChannelCLI {
+		loop.channelBus.Publish(*resp)
+	} else if msg.Channel() == bus.ChannelCLI {
 		// Signal CLI that we're done even when MessageTool was used.
-		out := bus.NewOutboundMessage(msg.Channel(), msg.ChatId(), "")
+		out := bus.NewChannelMessage(msg.Channel(), msg.ChatId(), "")
 		out.SetMetadata(msg.Metadata())
-		loop.bus.PublishOutbound(out)
+		loop.channelBus.Publish(out)
 	}
 }
 
 // routeMessage dispatches msg to the appropriate channel-kind handler.
-func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
 	switch msg.Channel() {
 	case bus.ChannelSystem:
 		return loop.handleSystemChannel(ctx, msg)
@@ -122,13 +124,13 @@ func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.InboundMessage)
 // handleSystemChannel processes system-channel messages injected by subagents.
 // It parses the original channel/chat from msg.ChatId, runs one LLM summarisation
 // turn, and routes the reply to the original chat.
-func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
 	channelStr, chatId, _ := strings.Cut(msg.ChatId(), ":")
 	if chatId == "" {
 		channelStr = "cli"
 		chatId = msg.ChatId()
 	}
-	channel := bus.ChannelType(channelStr)
+	channel := bus.Channel(channelStr)
 
 	slog.Info("Processing system message", "sender", msg.SenderId())
 
@@ -137,7 +139,7 @@ func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.InboundM
 
 	ctx = tools.WithTurn(ctx, tools.TurnContext{Channel: channel, ChatID: chatId})
 
-	conversation := loop.promptBuilder.BuildMessages(
+	conversation := loop.pctx.BuildMessages(
 		sess.History(loop.settings.MemoryWindow),
 		msg.Content(),
 		nil,
@@ -152,21 +154,21 @@ func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.InboundM
 	sess.AddAssistant(final, nil)
 	loop.sessions.Save(sess)
 
-	out := bus.NewOutboundMessage(channel, chatId, final)
+	out := bus.NewChannelMessage(channel, chatId, final)
 	return &out
 }
 
 // handleCLIChannel handles messages arriving on the CLI channel.
 // The full pipeline is identical to external channels; the CLI-specific
 // empty-outbound signal (when MessageTool fired) is handled in handleMessage.
-func (loop *AgentLoop) handleCLIChannel(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+func (loop *AgentLoop) handleCLIChannel(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
 	return loop.handleExternalChannel(ctx, msg)
 }
 
 // handleCronChannel handles messages arriving on the cron channel.
 // Cron always uses ProcessDirect (bypassing the bus); if a message
 // somehow arrives on the bus the pipeline runs but no outbound is published.
-func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
 	loop.handleExternalChannel(ctx, msg)
 
 	return nil
@@ -175,7 +177,7 @@ func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg bus.InboundMes
 // handleHeartbeatChannel handles messages arriving on the heartbeat channel.
 // Heartbeat always uses ProcessDirect (bypassing the bus); if a message
 // somehow arrives on the bus the pipeline runs but no outbound is published.
-func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
 	loop.handleExternalChannel(ctx, msg)
 
 	return nil
@@ -185,7 +187,7 @@ func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.Inbou
 // (telegram, discord, slack, whatsapp, feishu, dingtalk, email, mochat, qq).
 // It runs slash commands, the full LLM loop, saves the session, and returns
 // an OutboundMessage — or nil if the message tool already sent the reply.
-func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.InboundMessage) *bus.OutboundMessage {
+func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.AgentBusMessage) *bus.ChannelMessage {
 	slog.Info(
 		"Processing message",
 		"sender", msg.SenderId(),
@@ -204,7 +206,7 @@ func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.Inboun
 
 	ctx, msgSentChan := loop.withTurnContext(ctx, msg)
 
-	conversation := loop.promptBuilder.BuildMessages(
+	conversation := loop.pctx.BuildMessages(
 		ses.History(loop.settings.MemoryWindow),
 		msg.Content(),
 		msg.Media(),
@@ -231,7 +233,7 @@ func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.Inboun
 	default:
 	}
 
-	out := bus.NewOutboundMessage(msg.Channel(), msg.ChatId(), final)
+	out := bus.NewChannelMessage(msg.Channel(), msg.ChatId(), final)
 	out.SetMetadata(msg.Metadata())
 	return &out
 }
@@ -239,10 +241,10 @@ func (loop *AgentLoop) handleExternalChannel(ctx context.Context, msg bus.Inboun
 // handleSlashCommand checks msg.Content for a known slash command and handles
 // it. Returns non-nil if the command was handled (caller should return early).
 func (loop *AgentLoop) handleSlashCommand(
-	msg bus.InboundMessage,
+	msg bus.AgentBusMessage,
 	ses *session.ChannelSessionImpl,
 	key string,
-) *bus.OutboundMessage {
+) *bus.ChannelMessage {
 	cmd := strings.TrimSpace(strings.ToLower(msg.Content()))
 	switch cmd {
 	case "/new":
@@ -255,7 +257,7 @@ func (loop *AgentLoop) handleSlashCommand(
 
 // handleCmdNew clears the current session and triggers background memory
 // consolidation, then replies with a confirmation.
-func (loop *AgentLoop) handleCmdNew(msg bus.InboundMessage, sess *session.ChannelSessionImpl, key string) *bus.OutboundMessage {
+func (loop *AgentLoop) handleCmdNew(msg bus.AgentBusMessage, sess *session.ChannelSessionImpl, key string) *bus.ChannelMessage {
 	archived := sess.Messages()
 	sess.Clear()
 	loop.sessions.Save(sess)
@@ -264,22 +266,22 @@ func (loop *AgentLoop) handleCmdNew(msg bus.InboundMessage, sess *session.Channe
 	tmp := session.NewArchivedSession(key, archived)
 	loop.compactor.Schedule(key+":archive", tmp, true)
 
-	out := bus.NewOutboundMessage(msg.Channel(), msg.ChatId(), "New session started. Memory consolidation in progress.")
+	out := bus.NewChannelMessage(msg.Channel(), msg.ChatId(), "New session started. Memory consolidation in progress.")
 	out.SetMetadata(msg.Metadata())
 
 	return &out
 }
 
 // handleCmdHelp returns the help text listing available slash commands.
-func (loop *AgentLoop) handleCmdHelp(msg bus.InboundMessage) *bus.OutboundMessage {
-	out := bus.NewOutboundMessage(msg.Channel(), msg.ChatId(), "crystaldolphin commands:\n/new — Start a new conversation\n/help — Show available commands")
+func (loop *AgentLoop) handleCmdHelp(msg bus.AgentBusMessage) *bus.ChannelMessage {
+	out := bus.NewChannelMessage(msg.Channel(), msg.ChatId(), "crystaldolphin commands:\n/new — Start a new conversation\n/help — Show available commands")
 	out.SetMetadata(msg.Metadata())
 	return &out
 }
 
 // withTurnContext decorates ctx with per-turn routing information and returns
 // a channel that is closed when the message tool has sent a reply.
-func (loop *AgentLoop) withTurnContext(ctx context.Context, msg bus.InboundMessage) (context.Context, chan struct{}) {
+func (loop *AgentLoop) withTurnContext(ctx context.Context, msg bus.AgentBusMessage) (context.Context, chan struct{}) {
 	msgID := ""
 	if v, ok := msg.Metadata()["message_id"].(string); ok {
 		msgID = v
@@ -296,14 +298,14 @@ func (loop *AgentLoop) withTurnContext(ctx context.Context, msg bus.InboundMessa
 
 // progressCallback returns a function that pushes intermediate output to
 // the outbound bus so clients can display streaming progress.
-func (loop *AgentLoop) progressCallback(msg bus.InboundMessage) func(string) {
+func (loop *AgentLoop) progressCallback(msg bus.AgentBusMessage) func(string) {
 	return func(content string) {
 		meta := map[string]any{"_progress": true}
 		for k, v := range msg.Metadata() {
 			meta[k] = v
 		}
-		out := bus.NewOutboundMessage(msg.Channel(), msg.ChatId(), content)
+		out := bus.NewChannelMessage(msg.Channel(), msg.ChatId(), content)
 		out.SetMetadata(meta)
-		loop.bus.PublishOutbound(out)
+		loop.channelBus.Publish(out)
 	}
 }

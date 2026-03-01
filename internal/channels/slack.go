@@ -23,7 +23,7 @@ type SlackChannel struct {
 	botUserID string
 }
 
-func NewSlackChannel(cfg *channel.SlackConfig, b bus.Bus) *SlackChannel {
+func NewSlackChannel(cfg *channel.SlackConfig, b *bus.AgentBus) *SlackChannel {
 	return &SlackChannel{
 		Base: NewBase("slack", b, nil), // Slack uses its own allow logic
 		cfg:  cfg,
@@ -188,7 +188,7 @@ func (s *SlackChannel) stripMention(text string) string {
 	return strings.TrimSpace(re.ReplaceAllString(text, ""))
 }
 
-func (s *SlackChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
+func (s *SlackChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
 	if s.webClient == nil {
 		return nil
 	}

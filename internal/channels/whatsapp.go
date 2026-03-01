@@ -21,7 +21,7 @@ type WhatsAppChannel struct {
 	connected bool
 }
 
-func NewWhatsAppChannel(cfg *channel.WhatsAppConfig, b bus.Bus) *WhatsAppChannel {
+func NewWhatsAppChannel(cfg *channel.WhatsAppConfig, b *bus.AgentBus) *WhatsAppChannel {
 	return &WhatsAppChannel{
 		Base: NewBase("whatsapp", b, cfg.AllowFrom),
 		cfg:  cfg,
@@ -124,7 +124,7 @@ func (w *WhatsAppChannel) handleBridgeMessage(raw []byte) {
 	}
 }
 
-func (w *WhatsAppChannel) Send(_ context.Context, msg bus.OutboundMessage) error {
+func (w *WhatsAppChannel) Send(_ context.Context, msg bus.ChannelMessage) error {
 	if w.conn == nil || !w.connected {
 		return fmt.Errorf("whatsapp: bridge not connected")
 	}

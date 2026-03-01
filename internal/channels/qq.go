@@ -32,7 +32,7 @@ type QQChannel struct {
 	seenQueue []string
 }
 
-func NewQQChannel(cfg *channel.QQConfig, b bus.Bus) *QQChannel {
+func NewQQChannel(cfg *channel.QQConfig, b *bus.AgentBus) *QQChannel {
 	return &QQChannel{
 		Base:       NewBase("qq", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -243,7 +243,7 @@ func (q *QQChannel) handleC2CMessage(payload map[string]any) {
 	})
 }
 
-func (q *QQChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
+func (q *QQChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
 	token, err := q.getAccessToken(ctx)
 	if err != nil {
 		return err

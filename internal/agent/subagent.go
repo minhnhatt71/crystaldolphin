@@ -20,14 +20,14 @@ import (
 // a restricted tool set (no message/spawn/cron tools).
 type SubagentManager struct {
 	factory *AgentFactory
-	bus     bus.Bus
+	bus     *bus.AgentBus
 
 	mu      sync.Mutex
 	running map[string]context.CancelFunc
 }
 
 // NewSubagentManager creates a SubagentManager backed by the given factory.
-func NewSubagentManager(factory *AgentFactory, bus bus.Bus) *SubagentManager {
+func NewSubagentManager(factory *AgentFactory, bus *bus.AgentBus) *SubagentManager {
 	return &SubagentManager{
 		factory: factory,
 		bus:     bus,
@@ -37,7 +37,7 @@ func NewSubagentManager(factory *AgentFactory, bus bus.Bus) *SubagentManager {
 
 // Spawn starts a background subagent goroutine and returns immediately.
 // Implements tools.Spawner.
-func (sm *SubagentManager) Spawn(ctx context.Context, task, label string, originChannel bus.ChannelType, originChatID string) (string, error) {
+func (sm *SubagentManager) Spawn(ctx context.Context, task, label string, originChannel bus.Channel, originChatID string) (string, error) {
 	taskID := shortID()
 	label = llmutils.StringOrDefault(label, task)
 	label = llmutils.Truncate(label, 30)
@@ -64,7 +64,7 @@ func (sm *SubagentManager) Spawn(ctx context.Context, task, label string, origin
 
 func (sm *SubagentManager) runSubagent(
 	ctx context.Context,
-	taskId, task, label string, originChannel bus.ChannelType, originChatId string,
+	taskId, task, label string, originChannel bus.Channel, originChatId string,
 ) {
 	slog.Info("Subagent starting", "id", taskId, "label", label)
 
@@ -100,7 +100,7 @@ func (sm *SubagentManager) executeTask(ctx context.Context, task, _ string) (str
 
 func (sm *SubagentManager) announceResult(
 	label, task, result, status string,
-	originChannel bus.ChannelType,
+	originChannel bus.Channel,
 	originChatID string,
 ) {
 	content := fmt.Sprintf(`[Subagent '%s' %s]
@@ -113,8 +113,8 @@ Result:
 Summarize this naturally for the user. Keep it brief (1-2 sentences). Do not mention technical details like "subagent" or task IDs.`,
 		label, status, task, result)
 
-	sm.bus.PublishInbound(
-		bus.NewInboundMessage(bus.ChannelSystem, bus.SenderIdSubAgent, string(originChannel)+":"+originChatID, content, ""),
+	sm.bus.Publish(
+		bus.NewAgentBusMessage(bus.ChannelSystem, bus.SenderIdSubAgent, string(originChannel)+":"+originChatID, content, ""),
 	)
 }
 

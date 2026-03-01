@@ -29,7 +29,7 @@ type FeishuChannel struct {
 	tokenExp   time.Time
 }
 
-func NewFeishuChannel(cfg *channel.FeishuConfig, b bus.Bus) *FeishuChannel {
+func NewFeishuChannel(cfg *channel.FeishuConfig, b *bus.AgentBus) *FeishuChannel {
 	return &FeishuChannel{
 		Base:       NewBase("feishu", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -255,7 +255,7 @@ func extractPostText(v any, parts *[]string) {
 	}
 }
 
-func (f *FeishuChannel) Send(ctx context.Context, msg bus.OutboundMessage) error {
+func (f *FeishuChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
 	token, err := f.getAccessToken(ctx)
 	if err != nil {
 		return err
