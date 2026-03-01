@@ -85,7 +85,7 @@ func (t *CronTool) addJob(ctx context.Context, params map[string]any) string {
 	}
 
 	tc := TurnCtx(ctx)
-	if tc.Channel == "" || tc.ChatID == "" {
+	if tc.channel == "" || tc.chatId == "" {
 		return "Error: no session context (channel/chat_id)"
 	}
 
@@ -126,7 +126,7 @@ func (t *CronTool) addJob(ctx context.Context, params map[string]any) string {
 
 	id, err := t.svc.AddJob(
 		name, message, kind, everyMs, cronExpr, tz, atMs,
-		true, tc.Channel, tc.ChatID, deleteAfterRun)
+		true, tc.channel, tc.chatId, deleteAfterRun)
 	if err != nil {
 		return fmt.Sprintf("Error creating job: %v", err)
 	}

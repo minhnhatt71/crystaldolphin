@@ -2,34 +2,45 @@ package tools
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 )
 
-// TurnContext carries per-turn routing metadata through the context tree.
+// turnContext carries per-turn routing metadata through the context tree.
 // It is set by the agent loop once per message and read by stateful tools
 // (message, spawn, cron) inside Execute
-type TurnContext struct {
-	Channel bus.Channel
-	ChatID  string
-	MsgID   string
-
-	// MessageSent is closed by MessageTool.Execute when it delivers a message.
-	// The agent loop checks it after runLoop via a non-blocking receive to
-	// decide whether to suppress the automatic reply.
-	MessageSent chan struct{}
+type turnContext struct {
+	channel   bus.Channel
+	chatId    string
+	messageId string
+	published *atomic.Bool
 }
 
 type turnKey struct{}
 
 // WithTurn returns a child context that carries tc.
-func WithTurn(ctx context.Context, tc TurnContext) context.Context {
-	return context.WithValue(ctx, turnKey{}, tc)
+func WithTurn(ctx context.Context, channel bus.Channel, chatId, msgID string) context.Context {
+	return context.WithValue(ctx, turnKey{}, &turnContext{
+		channel:   channel,
+		chatId:    chatId,
+		messageId: msgID,
+		published: &atomic.Bool{},
+	})
 }
 
 // TurnCtx extracts the TurnContext from ctx.
 // Returns a zero-value TurnContext if none was set.
-func TurnCtx(ctx context.Context) TurnContext {
-	tc, _ := ctx.Value(turnKey{}).(TurnContext)
-	return tc
+func TurnCtx(ctx context.Context) turnContext {
+	if tc, ok := ctx.Value(turnKey{}).(*turnContext); ok && tc != nil {
+		return *tc
+	}
+	return turnContext{}
+}
+
+func (ctx turnContext) PublishedToChannels() bool {
+	if ctx.published == nil {
+		return false
+	}
+	return ctx.published.Load()
 }

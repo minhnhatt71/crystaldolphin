@@ -59,15 +59,15 @@ func (t *MessageTool) Execute(ctx context.Context, params map[string]any) (strin
 
 	tc := TurnCtx(ctx)
 
-	channel := tc.Channel
+	channel := tc.channel
 	if ch, ok := params["channel"].(string); ok && ch != "" {
 		channel = bus.Channel(ch)
 	}
-	chatID := tc.ChatID
+	chatID := tc.chatId
 	if cid, ok := params["chat_id"].(string); ok && cid != "" {
 		chatID = cid
 	}
-	msgID := tc.MsgID
+	msgID := tc.messageId
 	if mid, ok := params["message_id"].(string); ok && mid != "" {
 		msgID = mid
 	}
@@ -97,8 +97,8 @@ func (t *MessageTool) Execute(ctx context.Context, params map[string]any) (strin
 
 	t.channelBus.Publish(message)
 
-	if tc.MessageSent != nil {
-		close(tc.MessageSent)
+	if tc.published != nil {
+		tc.published.Store(true)
 	}
 
 	info := ""

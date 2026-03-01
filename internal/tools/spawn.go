@@ -55,11 +55,11 @@ func (t *SpawnTool) Execute(ctx context.Context, params map[string]any) (string,
 	label, _ := params["label"].(string)
 
 	tc := TurnCtx(ctx)
-	originChannel := tc.Channel
+	originChannel := tc.channel
 	if originChannel == "" {
 		originChannel = bus.ChannelCLI
 	}
-	originChatID := tc.ChatID
+	originChatID := tc.chatId
 	if originChatID == "" {
 		originChatID = "direct"
 	}

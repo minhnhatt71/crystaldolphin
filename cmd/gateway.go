@@ -66,7 +66,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 	defer removePIDFile()
 
 	agentLoop := svc.AgentLoop()
-	channelBus := svc.ChannelBus()
+	channelBus := svc.Buses().ChannelBus()
 	cronManager := svc.CronService()
 
 	cronManager.OnJobFunc(func(ctx context.Context, job cron.CronJob) (string, error) {
@@ -102,7 +102,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 
 	g, gctx := errgroup.WithContext(ctx)
 
-	channelManager := channels.NewManager(cfg, svc.AgentBus(), channelBus, svc.ConsoleBus())
+	channelManager := channels.NewManager(cfg, svc.Buses())
 	if enabled := channelManager.EnabledChannels(); len(enabled) > 0 {
 		fmt.Printf("✓ Channels enabled: %s\n", strings.Join(enabled, ", "))
 	} else {

@@ -19,20 +19,16 @@ import (
 // ServiceContainer holds the resolved core service singletons.
 // Callers use the typed getter methods; they never need to import dig directly.
 type ServiceContainer struct {
-	provider    schema.LLMProvider
-	inboundBus  *bus.AgentBus
-	outboundBus *bus.ChannelBus
-	consoleBus  *bus.ConsoleBus
-	loop        schema.AgentLooper
-	cronSvc     *cron.JobManager
+	provider schema.LLMProvider
+	buses    *bus.MessageBusManager
+	loop     schema.AgentLooper
+	cronSvc  *cron.JobManager
 }
 
-func (c *ServiceContainer) Provider() schema.LLMProvider  { return c.provider }
-func (c *ServiceContainer) AgentBus() *bus.AgentBus       { return c.inboundBus }
-func (c *ServiceContainer) ChannelBus() *bus.ChannelBus   { return c.outboundBus }
-func (c *ServiceContainer) ConsoleBus() *bus.ConsoleBus   { return c.consoleBus }
-func (c *ServiceContainer) AgentLoop() schema.AgentLooper { return c.loop }
-func (c *ServiceContainer) CronService() *cron.JobManager { return c.cronSvc }
+func (c *ServiceContainer) Provider() schema.LLMProvider       { return c.provider }
+func (c *ServiceContainer) Buses() *bus.MessageBusManager      { return c.buses }
+func (c *ServiceContainer) AgentLoop() schema.AgentLooper      { return c.loop }
+func (c *ServiceContainer) CronService() *cron.JobManager      { return c.cronSvc }
 
 // LLMModel is a named string type so dig can distinguish it from plain
 // strings when injecting the effective model name into providers that need it.
@@ -59,13 +55,13 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	if err := d.Provide(resolveLLMModel); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newAgentBus); err != nil {
+	if err := d.Provide(newMessageBusManager); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newChannelBus); err != nil {
+	if err := d.Provide(func(m *bus.MessageBusManager) *bus.AgentBus { return m.AgentBus() }); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(newConsoleBus); err != nil {
+	if err := d.Provide(func(m *bus.MessageBusManager) *bus.ChannelBus { return m.ChannelBus() }); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newSessionManager); err != nil {
@@ -108,19 +104,15 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	var result *ServiceContainer
 	err := d.Invoke(func(
 		provider schema.LLMProvider,
-		inbound *bus.AgentBus,
-		outbound *bus.ChannelBus,
-		console *bus.ConsoleBus,
+		buses *bus.MessageBusManager,
 		loop schema.AgentLooper,
 		cronSvc *cron.JobManager,
 	) {
 		result = &ServiceContainer{
-			provider:    provider,
-			inboundBus:  inbound,
-			outboundBus: outbound,
-			consoleBus:  console,
-			loop:        loop,
-			cronSvc:     cronSvc,
+			provider: provider,
+			buses:    buses,
+			loop:     loop,
+			cronSvc:  cronSvc,
 		}
 	})
 	return result, err
@@ -159,16 +151,8 @@ func isOAuthProvider(name string) bool {
 	return spec != nil && spec.IsOAuth
 }
 
-func newAgentBus() *bus.AgentBus {
-	return bus.NewAgentBus(100)
-}
-
-func newChannelBus() *bus.ChannelBus {
-	return bus.NewChannelBus(100)
-}
-
-func newConsoleBus() *bus.ConsoleBus {
-	return bus.NewConsoleBus(100)
+func newMessageBusManager() *bus.MessageBusManager {
+	return bus.NewMessageBusManager(100)
 }
 
 func newSessionManager(cfg *config.Config) (*session.Manager, error) {

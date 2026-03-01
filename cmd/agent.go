@@ -38,7 +38,7 @@ func init() {
 	agentCmd.Flags().BoolVar(&logs, "logs", false, "Show runtime logs")
 }
 
-func runAgent(_ *cobra.Command, _ []string) error {
+func runAgent(cmd *cobra.Command, args []string) error {
 	cfg, err := config.Load(config.ConfigPath())
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -57,19 +57,13 @@ func runAgent(_ *cobra.Command, _ []string) error {
 		return runSingleMessage(loop, key, ch, chatId)
 	}
 
-	manager := channels.NewManager(
-		cfg,
-		container.AgentBus(),
-		container.ChannelBus(),
-		container.ConsoleBus(),
-	)
+	manager := channels.NewManager(cfg, container.Buses())
 
 	return runInteractive(loop, manager)
 }
 
 // runSingleMessage sends one message to the agent and prints the response.
 func runSingleMessage(loop schema.AgentLooper, key string, channel bus.Channel, chatId string) error {
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 

@@ -1,12 +1,3 @@
-// Package session manages per-conversation history stored as JSONL files.
-//
-// File format (byte-compatible with nanobot Python):
-//
-//	Line 1:  {"_type":"metadata","key":"…","created_at":"…","updated_at":"…",
-//	           "metadata":{…},"last_consolidated":N}
-//	Line 2+: one JSON message object per line
-//
-// Messages are append-only; consolidation only writes to memory files.
 package session
 
 import (
@@ -51,11 +42,11 @@ func (m *Manager) GetOrCreate(key string) *ChannelSessionImpl {
 	s := m.load(key)
 	if s == nil {
 		s = &ChannelSessionImpl{
-			Key:       key,
-			Entries:   schema.NewMessages(),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-			Metadata:  map[string]any{},
+			key:       key,
+			messages:  schema.NewMessages(),
+			createdAt: time.Now(),
+			updatedAt: time.Now(),
+			metadata:  map[string]any{},
 		}
 	}
 
@@ -66,23 +57,23 @@ func (m *Manager) GetOrCreate(key string) *ChannelSessionImpl {
 
 // Save writes the session to disk and updates the cache.
 func (m *Manager) Save(s *ChannelSessionImpl) error {
-	path := m.sessionPath(s.Key)
+	path := m.sessionPath(s.key)
 
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false) // preserve non-ASCII, match Python ensure_ascii=False
 
-	s.mu.Lock()
-	msgs := s.Entries.Copy()
+	s.mutex.Lock()
+	msgs := s.messages.Copy()
 	meta := map[string]any{
 		"_type":             "metadata",
-		"key":               s.Key,
-		"created_at":        s.CreatedAt.UTC().Format(time.RFC3339),
+		"key":               s.key,
+		"created_at":        s.createdAt.UTC().Format(time.RFC3339),
 		"updated_at":        time.Now().UTC().Format(time.RFC3339),
-		"metadata":          s.Metadata,
+		"metadata":          s.metadata,
 		"last_consolidated": s.LastCompacted(),
 	}
-	s.mu.Unlock()
+	s.mutex.Unlock()
 
 	if err := enc.Encode(meta); err != nil {
 		return fmt.Errorf("encode metadata: %w", err)
@@ -99,7 +90,7 @@ func (m *Manager) Save(s *ChannelSessionImpl) error {
 		return fmt.Errorf("write session %s: %w", path, err)
 	}
 
-	m.cache.Store(s.Key, s)
+	m.cache.Store(s.key, s)
 	return nil
 }
 

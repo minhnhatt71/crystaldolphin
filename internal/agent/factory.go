@@ -51,8 +51,8 @@ func (f *AgentFactory) SetCoreTools(tls *tools.ToolList) {
 	f.coreTools = tls
 }
 
-// NewCoreAgent creates a CoreAgent ready to execute one user message.
-func (f *AgentFactory) NewCoreAgent() *CoreAgent {
+// NewPrimaryAgent creates a CoreAgent ready to execute one user message.
+func (f *AgentFactory) NewPrimaryAgent() *CoreAgent {
 	return &CoreAgent{
 		LoopRunner: newLoopRunner(f.provider, f.settings),
 		tools:      f.coreTools,

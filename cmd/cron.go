@@ -192,6 +192,7 @@ var cronRunCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
 		loop := c.AgentLoop()
 
 		svc := cron.NewService(cronStorePath())

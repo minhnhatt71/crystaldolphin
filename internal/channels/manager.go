@@ -19,58 +19,58 @@ type Manager struct {
 // NewManager creates a Manager and initialises all enabled channels.
 // The CLIChannel is always registered; it uses consoleBus to deliver replies
 // back to the terminal when the gateway is running interactively.
-func NewManager(cfg *config.Config, inbound *bus.AgentBus, outbound *bus.ChannelBus, console *bus.ConsoleBus) *Manager {
+func NewManager(cfg *config.Config, buses *bus.MessageBusManager) *Manager {
 	m := &Manager{
 		channels:   make(map[string]schema.Channel),
-		channelBus: outbound,
+		channelBus: buses.ChannelBus(),
 	}
 
-	cli := NewCLIChannel(inbound, console)
+	cli := NewCLIChannel(buses.AgentBus(), buses.ConsoleBus())
 	m.channels[cli.Name()] = cli
 	slog.Info("channel enabled", "name", cli.Name())
 
 	if cfg.Channels.Telegram.Enabled {
-		ch := NewTelegramChannel(&cfg.Channels.Telegram, inbound)
+		ch := NewTelegramChannel(&cfg.Channels.Telegram, buses.AgentBus())
 		m.channels["telegram"] = ch
 		slog.Info("channel enabled", "name", "telegram")
 	}
 	if cfg.Channels.WhatsApp.Enabled {
-		ch := NewWhatsAppChannel(&cfg.Channels.WhatsApp, inbound)
+		ch := NewWhatsAppChannel(&cfg.Channels.WhatsApp, buses.AgentBus())
 		m.channels["whatsapp"] = ch
 		slog.Info("channel enabled", "name", "whatsapp")
 	}
 	if cfg.Channels.Discord.Enabled {
-		ch := NewDiscordChannel(&cfg.Channels.Discord, inbound)
+		ch := NewDiscordChannel(&cfg.Channels.Discord, buses.AgentBus())
 		m.channels["discord"] = ch
 		slog.Info("channel enabled", "name", "discord")
 	}
 	if cfg.Channels.Slack.Enabled {
-		ch := NewSlackChannel(&cfg.Channels.Slack, inbound)
+		ch := NewSlackChannel(&cfg.Channels.Slack, buses.AgentBus())
 		m.channels["slack"] = ch
 		slog.Info("channel enabled", "name", "slack")
 	}
 	if cfg.Channels.Feishu.Enabled {
-		ch := NewFeishuChannel(&cfg.Channels.Feishu, inbound)
+		ch := NewFeishuChannel(&cfg.Channels.Feishu, buses.AgentBus())
 		m.channels["feishu"] = ch
 		slog.Info("channel enabled", "name", "feishu")
 	}
 	if cfg.Channels.DingTalk.Enabled {
-		ch := NewDingTalkChannel(&cfg.Channels.DingTalk, inbound)
+		ch := NewDingTalkChannel(&cfg.Channels.DingTalk, buses.AgentBus())
 		m.channels["dingtalk"] = ch
 		slog.Info("channel enabled", "name", "dingtalk")
 	}
 	if cfg.Channels.Email.Enabled {
-		ch := NewEmailChannel(&cfg.Channels.Email, inbound)
+		ch := NewEmailChannel(&cfg.Channels.Email, buses.AgentBus())
 		m.channels["email"] = ch
 		slog.Info("channel enabled", "name", "email")
 	}
 	if cfg.Channels.Mochat.Enabled {
-		ch := NewMochatChannel(&cfg.Channels.Mochat, inbound)
+		ch := NewMochatChannel(&cfg.Channels.Mochat, buses.AgentBus())
 		m.channels["mochat"] = ch
 		slog.Info("channel enabled", "name", "mochat")
 	}
 	if cfg.Channels.QQ.Enabled {
-		ch := NewQQChannel(&cfg.Channels.QQ, inbound)
+		ch := NewQQChannel(&cfg.Channels.QQ, buses.AgentBus())
 		m.channels["qq"] = ch
 		slog.Info("channel enabled", "name", "qq")
 	}
@@ -87,6 +87,7 @@ func (m *Manager) EnabledChannels() []string {
 	return names
 }
 
+// Start starts the specified channel and dispatches outbound messages. Blocks until ctx is cancelled.
 func (m *Manager) Start(ctx context.Context, name string) error {
 	ch, ok := m.channels[name]
 	if !ok {
