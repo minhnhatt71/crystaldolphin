@@ -11,6 +11,7 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
+	"github.com/crystaldolphin/crystaldolphin/internal/shared/cmdutils"
 )
 
 var cronCmd = &cobra.Command{
@@ -207,9 +208,8 @@ var cronRunCmd = &cobra.Command{
 			msg := bus.NewAgentBusMessage(ch, bus.SenderIdCLI, chatID, job.Payload.Message, "cron:"+job.ID)
 			resp := loop.ProcessDirect(ctx, msg)
 
-			if resp != "" {
-				printResponse(resp)
-			}
+			cmdutils.PrintResponse(resp)
+
 			return resp, nil
 		})
 

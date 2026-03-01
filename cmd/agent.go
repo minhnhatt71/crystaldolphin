@@ -16,6 +16,7 @@ import (
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
+	"github.com/crystaldolphin/crystaldolphin/internal/shared/cmdutils"
 )
 
 var (
@@ -82,7 +83,8 @@ func runSingleMessage(loop schema.AgentLooper, key string, channel bus.Channel, 
 
 	res := loop.ProcessDirect(ctx, message)
 
-	printResponse(res)
+	cmdutils.PrintResponse(res)
+
 	return nil
 }
 
@@ -157,9 +159,8 @@ func sendAndWait(ctx context.Context, agentbus *bus.AgentBus, chanbus *bus.Chann
 					fmt.Printf("  ↳ %s\n", msg.Content())
 					continue
 				}
-				if msg.Content() != "" {
-					printResponse(msg.Content())
-				}
+
+				cmdutils.PrintResponse(msg.Content())
 				return
 			case <-ctx.Done():
 				return
@@ -167,10 +168,6 @@ func sendAndWait(ctx context.Context, agentbus *bus.AgentBus, chanbus *bus.Chann
 		}
 	}()
 	<-doneCh
-}
-
-func printResponse(text string) {
-	fmt.Printf("\n%s crystaldolphin\n%s\n\n", logo, text)
 }
 
 func parseRoutingKey(key string) (channel bus.Channel, chatID string) {
