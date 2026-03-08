@@ -1,5 +1,5 @@
 // Package agent contains the core agent loop and its supporting components.
-package agent
+package agentlegacy
 
 import (
 	"fmt"

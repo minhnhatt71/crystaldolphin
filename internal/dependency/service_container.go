@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/dig"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/agent"
+	"github.com/crystaldolphin/crystaldolphin/internal/agentlegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
@@ -25,10 +25,10 @@ type ServiceContainer struct {
 	cronSvc  *cron.JobManager
 }
 
-func (c *ServiceContainer) Provider() schema.LLMProvider       { return c.provider }
-func (c *ServiceContainer) Buses() *bus.MessageBusManager      { return c.buses }
-func (c *ServiceContainer) AgentLoop() schema.AgentLooper      { return c.loop }
-func (c *ServiceContainer) CronService() *cron.JobManager      { return c.cronSvc }
+func (c *ServiceContainer) Provider() schema.LLMProvider  { return c.provider }
+func (c *ServiceContainer) Buses() *bus.MessageBusManager { return c.buses }
+func (c *ServiceContainer) AgentLoop() schema.AgentLooper { return c.loop }
+func (c *ServiceContainer) CronService() *cron.JobManager { return c.cronSvc }
 
 // LLMModel is a named string type so dig can distinguish it from plain
 // strings when injecting the effective model name into providers that need it.
@@ -199,7 +199,7 @@ func newAgentFactory(
 	m LLMModel,
 	subReg SubagentRegistry,
 	mcpMgr *mcp.Manager,
-) *agent.AgentFactory {
+) *agentlegacy.AgentFactory {
 	coreSettings := schema.NewAgentSettings(
 		string(m),
 		cfg.Agents.Defaults.MaxToolIter,
@@ -216,17 +216,17 @@ func newAgentFactory(
 		0,
 	)
 
-	return agent.NewFactory(p, coreSettings, subSettings, subReg.Registry, mcpMgr, cfg.WorkspacePath())
+	return agentlegacy.NewFactory(p, coreSettings, subSettings, subReg.Registry, mcpMgr, cfg.WorkspacePath())
 }
 
-func newSubagentManager(factory *agent.AgentFactory, inbound *bus.AgentBus) *agent.SubagentManager {
-	return agent.NewSubagentManager(factory, inbound)
+func newSubagentManager(factory *agentlegacy.AgentFactory, inbound *bus.AgentBus) *agentlegacy.SubagentManager {
+	return agentlegacy.NewSubagentManager(factory, inbound)
 }
 
 func newAgentRegistry(
 	cfg *config.Config,
 	outbound *bus.ChannelBus,
-	subMgr *agent.SubagentManager,
+	subMgr *agentlegacy.SubagentManager,
 	cronMgr *cron.JobManager,
 	mem schema.MemoryStore,
 ) AgentRegistry {
@@ -254,23 +254,23 @@ func newAgentRegistry(
 }
 
 func newMemoryStore(cfg *config.Config) (schema.MemoryStore, error) {
-	mem, err := agent.NewMemoryStore(cfg.WorkspacePath())
+	mem, err := agentlegacy.NewMemoryStore(cfg.WorkspacePath())
 	if err != nil || mem == nil {
-		return &agent.FileMemoryStore{}, nil
+		return &agentlegacy.FileMemoryStore{}, nil
 	}
 	return mem, nil
 }
 
 func newCompactor(cfg *config.Config, mem schema.MemoryStore, saver *session.Manager, p schema.LLMProvider, m LLMModel, reg AgentRegistry) schema.MemoryCompactor {
-	return agent.NewCompactor(mem, saver, p, string(m), cfg.Agents.Defaults.MemoryWindow, reg.Registry)
+	return agentlegacy.NewCompactor(mem, saver, p, string(m), cfg.Agents.Defaults.MemoryWindow, reg.Registry)
 }
 
 func newSkillsLoader(cfg *config.Config) schema.SkillLoader {
-	return agent.NewSkillsLoader(cfg.WorkspacePath(), "")
+	return agentlegacy.NewSkillsLoader(cfg.WorkspacePath(), "")
 }
 
-func newContextBuilder(cfg *config.Config, mem schema.MemoryStore, sl schema.SkillLoader) *agent.PromptContext {
-	return agent.NewContextBuilder(cfg.WorkspacePath(), mem, sl)
+func newContextBuilder(cfg *config.Config, mem schema.MemoryStore, sl schema.SkillLoader) *agentlegacy.PromptContext {
+	return agentlegacy.NewContextBuilder(cfg.WorkspacePath(), mem, sl)
 }
 
 func newMCPManager(cfg *config.Config) *mcp.Manager {
@@ -280,14 +280,14 @@ func newMCPManager(cfg *config.Config) *mcp.Manager {
 func newAgentLoop(
 	inbound *bus.AgentBus,
 	outbound *bus.ChannelBus,
-	factory *agent.AgentFactory,
+	factory *agentlegacy.AgentFactory,
 	cfg *config.Config,
 	m LLMModel,
 	sessions *session.Manager,
 	consolidator schema.MemoryCompactor,
-	subMgr *agent.SubagentManager,
+	subMgr *agentlegacy.SubagentManager,
 	reg AgentRegistry,
-	cb *agent.PromptContext,
+	cb *agentlegacy.PromptContext,
 ) schema.AgentLooper {
 	settings := schema.NewAgentSettings(
 		string(m),
@@ -297,5 +297,5 @@ func newAgentLoop(
 		cfg.Agents.Defaults.MemoryWindow,
 	)
 
-	return agent.NewAgentLoop(inbound, outbound, factory, settings, sessions, consolidator, reg.Registry, subMgr, cb)
+	return agentlegacy.NewAgentLoop(inbound, outbound, factory, settings, sessions, consolidator, reg.Registry, subMgr, cb)
 }

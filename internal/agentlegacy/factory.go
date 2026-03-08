@@ -1,4 +1,4 @@
-package agent
+package agentlegacy
 
 import (
 	"github.com/crystaldolphin/crystaldolphin/internal/mcp"
