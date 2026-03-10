@@ -14,7 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
@@ -29,7 +29,7 @@ type FeishuChannel struct {
 	tokenExp   time.Time
 }
 
-func NewFeishuChannel(cfg *channel.FeishuConfig, b *bus.AgentBus) *FeishuChannel {
+func NewFeishuChannel(cfg *channel.FeishuConfig, b *buslegacy.AgentBus) *FeishuChannel {
 	return &FeishuChannel{
 		Base:       NewBase("feishu", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -255,7 +255,7 @@ func extractPostText(v any, parts *[]string) {
 	}
 }
 
-func (f *FeishuChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
+func (f *FeishuChannel) Send(ctx context.Context, msg buslegacy.ChannelMessage) error {
 	token, err := f.getAccessToken(ctx)
 	if err != nil {
 		return err

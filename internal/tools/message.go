@@ -5,19 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 )
 
 // MessageTool sends a message to the user on a chat channel.
 // Routing (channel, chat_id, message_id) is read from the TurnContext stored
 // in the context passed to Execute — no mutable per-turn state on the struct.
 type MessageTool struct {
-	channelBus *bus.ChannelBus
+	channelBus *buslegacy.ChannelBus
 }
 
 // NewMessageTool creates a MessageTool that publishes all replies to channelBus.
 // The channel manager routes each message to the appropriate channel (including CLIChannel).
-func NewMessageTool(channelBus *bus.ChannelBus) *MessageTool {
+func NewMessageTool(channelBus *buslegacy.ChannelBus) *MessageTool {
 	return &MessageTool{channelBus: channelBus}
 }
 
@@ -61,7 +61,7 @@ func (t *MessageTool) Execute(ctx context.Context, params map[string]any) (strin
 
 	channel := tc.channel
 	if ch, ok := params["channel"].(string); ok && ch != "" {
-		channel = bus.Channel(ch)
+		channel = buslegacy.Channel(ch)
 	}
 	chatID := tc.chatId
 	if cid, ok := params["chat_id"].(string); ok && cid != "" {
@@ -90,7 +90,7 @@ func (t *MessageTool) Execute(ctx context.Context, params map[string]any) (strin
 		metadata["message_id"] = msgID
 	}
 
-	message := bus.NewChannelMessageBuilder(channel, chatID, content).
+	message := buslegacy.NewChannelMessageBuilder(channel, chatID, content).
 		Media(media).
 		Metadata(metadata).
 		Build()

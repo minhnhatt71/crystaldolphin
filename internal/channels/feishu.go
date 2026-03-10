@@ -14,7 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
@@ -29,7 +29,7 @@ type FeishuChannel struct {
 	tokenExp   time.Time
 }
 
-func NewFeishuChannel(cfg *channel.FeishuConfig, b *bus.AgentBus) *FeishuChannel {
+func NewFeishuChannel(cfg *channel.FeishuConfig, b *buslegacy.AgentBus) *FeishuChannel {
 	return &FeishuChannel{
 		Base:       NewBase(channelmodel.ChannelFeishu, b, cfg.AllowFrom),
 		cfg:        cfg,

@@ -1,4 +1,4 @@
-package bus
+package buslegacy
 
 // ChannelBus carries messages from agent → channels.
 // The agent loop calls PublishOutbound; the channel manager reads via SubscribeOutbound.

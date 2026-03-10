@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
@@ -23,7 +23,7 @@ type EmailChannel struct {
 	seenUID map[uint32]bool
 }
 
-func NewEmailChannel(cfg *channel.EmailConfig, b *bus.AgentBus) *EmailChannel {
+func NewEmailChannel(cfg *channel.EmailConfig, b *buslegacy.AgentBus) *EmailChannel {
 	return &EmailChannel{
 		Base:    NewBase(channelmodel.ChannelEmail, b, cfg.AllowFrom),
 		cfg:     cfg,

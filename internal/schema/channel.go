@@ -3,7 +3,7 @@ package schema
 import (
 	"context"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 )
 
 // Channel is the interface every chat-platform adapter must implement.
@@ -13,5 +13,5 @@ type Channel interface {
 	// Start begins listening for incoming messages; it blocks until ctx is cancelled.
 	Start(ctx context.Context) error
 	// Send delivers an outbound message to the platform.
-	Send(ctx context.Context, msg bus.ChannelMessage) error
+	Send(ctx context.Context, msg buslegacy.ChannelMessage) error
 }

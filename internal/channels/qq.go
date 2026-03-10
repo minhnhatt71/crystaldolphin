@@ -13,7 +13,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
@@ -26,12 +26,12 @@ type QQChannel struct {
 	token      string
 	tokenMu    sync.Mutex
 	tokenExp   time.Time
-	seenMu    sync.Mutex
-	seen      map[string]bool
-	seenQueue []string
+	seenMu     sync.Mutex
+	seen       map[string]bool
+	seenQueue  []string
 }
 
-func NewQQChannel(cfg *channel.QQConfig, b *bus.AgentBus) *QQChannel {
+func NewQQChannel(cfg *channel.QQConfig, b *buslegacy.AgentBus) *QQChannel {
 	return &QQChannel{
 		Base:       NewBase(channelmodel.ChannelQQ, b, cfg.AllowFrom),
 		cfg:        cfg,

@@ -7,7 +7,7 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 	"github.com/crystaldolphin/crystaldolphin/internal/session"
 	"github.com/crystaldolphin/crystaldolphin/internal/shared/llmutils"
@@ -22,8 +22,8 @@ import (
 type AgentLoop struct {
 	settings schema.AgentSettings
 
-	agentBus   *bus.AgentBus
-	channelBus *bus.ChannelBus
+	agentBus   *buslegacy.AgentBus
+	channelBus *buslegacy.ChannelBus
 	prompt     *PromptContext
 	sessions   *session.Manager
 	compactor  schema.MemoryCompactor
@@ -36,8 +36,8 @@ type AgentLoop struct {
 // NewAgentLoop creates an AgentLoop with the supplied factory, tool registry, and
 // subagent manager.
 func NewAgentLoop(
-	agentBus *bus.AgentBus,
-	channelBus *bus.ChannelBus,
+	agentBus *buslegacy.AgentBus,
+	channelBus *buslegacy.ChannelBus,
 	factory *AgentFactory,
 	settings schema.AgentSettings,
 	sessions *session.Manager,
@@ -84,8 +84,8 @@ func (loop *AgentLoop) Run(ctx context.Context) error {
 
 // ProcessDirect handles a message outside the bus (CLI, cron).
 // Returns the final text response.
-func (loop *AgentLoop) ProcessDirect(ctx context.Context, msg bus.AgentMessage) string {
-	var res *bus.ChannelMessage
+func (loop *AgentLoop) ProcessDirect(ctx context.Context, msg buslegacy.AgentMessage) string {
+	var res *buslegacy.ChannelMessage
 	if res = loop.routeMessage(ctx, msg); res == nil {
 		return ""
 	}
@@ -93,11 +93,11 @@ func (loop *AgentLoop) ProcessDirect(ctx context.Context, msg bus.AgentMessage) 
 	return res.Content()
 }
 
-func (loop *AgentLoop) process(ctx context.Context, msg bus.AgentMessage) {
+func (loop *AgentLoop) process(ctx context.Context, msg buslegacy.AgentMessage) {
 	resp := loop.routeMessage(ctx, msg)
 
-	if msg.Channel() == bus.ChannelCLI {
-		out := bus.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), "").
+	if msg.Channel() == buslegacy.ChannelCLI {
+		out := buslegacy.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), "").
 			Metadata(msg.Metadata()).
 			Build()
 
@@ -112,15 +112,15 @@ func (loop *AgentLoop) process(ctx context.Context, msg bus.AgentMessage) {
 }
 
 // routeMessage dispatches msg to the appropriate channel-kind handler.
-func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) routeMessage(ctx context.Context, msg buslegacy.AgentMessage) *buslegacy.ChannelMessage {
 	switch msg.Channel() {
-	case bus.ChannelSystem:
+	case buslegacy.ChannelSystem:
 		return loop.handleSystemChannel(ctx, msg)
-	case bus.ChannelCLI:
+	case buslegacy.ChannelCLI:
 		return loop.handleCLIChannel(ctx, msg)
-	case bus.ChannelCron:
+	case buslegacy.ChannelCron:
 		return loop.handleCronChannel(ctx, msg)
-	case bus.ChannelHeartbeat:
+	case buslegacy.ChannelHeartbeat:
 		return loop.handleHeartbeatChannel(ctx, msg)
 	default:
 		return loop.consumeMessage(ctx, msg)
@@ -130,18 +130,18 @@ func (loop *AgentLoop) routeMessage(ctx context.Context, msg bus.AgentMessage) *
 // handleSystemChannel processes system-channel messages injected by subagents.
 // It parses the original channel/chat from msg.ChatId, runs one LLM summarisation
 // turn, and routes the reply to the original chat.
-func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg buslegacy.AgentMessage) *buslegacy.ChannelMessage {
 	channelStr, chatId, _ := strings.Cut(msg.ChatId(), ":")
 	if chatId == "" {
 		channelStr = "cli"
 		chatId = msg.ChatId()
 	}
 
-	channel := bus.Channel(channelStr)
+	channel := buslegacy.Channel(channelStr)
 
 	slog.Info("Processing system message", "sender", msg.SenderId())
 
-	sess := loop.sessions.GetOrCreate(bus.RoutingKey(channel, chatId))
+	sess := loop.sessions.GetOrCreate(buslegacy.RoutingKey(channel, chatId))
 
 	ctx = tools.WithTurn(ctx, channel, chatId, "")
 
@@ -162,21 +162,21 @@ func (loop *AgentLoop) handleSystemChannel(ctx context.Context, msg bus.AgentMes
 
 	loop.sessions.Save(sess)
 
-	out := bus.NewChannelMessage(channel, chatId, result)
+	out := buslegacy.NewChannelMessage(channel, chatId, result)
 	return &out
 }
 
 // handleCLIChannel handles messages arriving on the CLI channel.
 // The full pipeline is identical to external channels; the CLI-specific
 // empty-outbound signal (when MessageTool fired) is handled in handleMessage.
-func (loop *AgentLoop) handleCLIChannel(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) handleCLIChannel(ctx context.Context, msg buslegacy.AgentMessage) *buslegacy.ChannelMessage {
 	return loop.consumeMessage(ctx, msg)
 }
 
 // handleCronChannel handles messages arriving on the cron channel.
 // Cron always uses ProcessDirect (bypassing the bus); if a message
 // somehow arrives on the bus the pipeline runs but no outbound is published.
-func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg buslegacy.AgentMessage) *buslegacy.ChannelMessage {
 	loop.consumeMessage(ctx, msg)
 
 	return nil
@@ -185,7 +185,7 @@ func (loop *AgentLoop) handleCronChannel(ctx context.Context, msg bus.AgentMessa
 // handleHeartbeatChannel handles messages arriving on the heartbeat channel.
 // Heartbeat always uses ProcessDirect (bypassing the bus); if a message
 // somehow arrives on the bus the pipeline runs but no outbound is published.
-func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg buslegacy.AgentMessage) *buslegacy.ChannelMessage {
 	loop.consumeMessage(ctx, msg)
 
 	return nil
@@ -195,7 +195,7 @@ func (loop *AgentLoop) handleHeartbeatChannel(ctx context.Context, msg bus.Agent
 // (telegram, discord, slack, whatsapp, feishu, dingtalk, email, mochat, qq).
 // It runs slash commands, the full LLM loop, saves the session, and returns
 // an OutboundMessage — or nil if the message tool already sent the reply.
-func (loop *AgentLoop) consumeMessage(ctx context.Context, msg bus.AgentMessage) *bus.ChannelMessage {
+func (loop *AgentLoop) consumeMessage(ctx context.Context, msg buslegacy.AgentMessage) *buslegacy.ChannelMessage {
 	slog.Info(
 		"Processing message",
 		"sender", msg.SenderId(),
@@ -243,7 +243,7 @@ func (loop *AgentLoop) consumeMessage(ctx context.Context, msg bus.AgentMessage)
 		"length", len(result),
 	)
 
-	out := bus.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), result).
+	out := buslegacy.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), result).
 		Metadata(msg.Metadata()).
 		Build()
 
@@ -253,10 +253,10 @@ func (loop *AgentLoop) consumeMessage(ctx context.Context, msg bus.AgentMessage)
 // handleSlashCommand checks msg.Content for a known slash command and handles
 // it. Returns non-nil if the command was handled (caller should return early).
 func (loop *AgentLoop) handleSlashCommand(
-	msg bus.AgentMessage,
+	msg buslegacy.AgentMessage,
 	ses *session.ChannelSessionImpl,
 	key string,
-) *bus.ChannelMessage {
+) *buslegacy.ChannelMessage {
 	cmd := strings.TrimSpace(strings.ToLower(msg.Content()))
 	switch cmd {
 	case "/new":
@@ -269,7 +269,7 @@ func (loop *AgentLoop) handleSlashCommand(
 
 // handleCmdNew clears the current session and triggers background memory
 // consolidation, then replies with a confirmation.
-func (loop *AgentLoop) handleCmdNew(msg bus.AgentMessage, sess *session.ChannelSessionImpl, key string) *bus.ChannelMessage {
+func (loop *AgentLoop) handleCmdNew(msg buslegacy.AgentMessage, sess *session.ChannelSessionImpl, key string) *buslegacy.ChannelMessage {
 	archived := sess.Messages()
 	sess.Clear()
 	loop.sessions.Save(sess)
@@ -278,7 +278,7 @@ func (loop *AgentLoop) handleCmdNew(msg bus.AgentMessage, sess *session.ChannelS
 	tmp := session.NewArchivedSession(key, archived)
 	loop.compactor.Schedule(key+":archive", tmp, true)
 
-	out := bus.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), "New session started. Memory consolidation in progress.").
+	out := buslegacy.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), "New session started. Memory consolidation in progress.").
 		Metadata(msg.Metadata()).
 		Build()
 
@@ -286,8 +286,8 @@ func (loop *AgentLoop) handleCmdNew(msg bus.AgentMessage, sess *session.ChannelS
 }
 
 // handleCmdHelp returns the help text listing available slash commands.
-func (loop *AgentLoop) handleCmdHelp(msg bus.AgentMessage) *bus.ChannelMessage {
-	out := bus.NewChannelMessageBuilder(
+func (loop *AgentLoop) handleCmdHelp(msg buslegacy.AgentMessage) *buslegacy.ChannelMessage {
+	out := buslegacy.NewChannelMessageBuilder(
 		msg.Channel(),
 		msg.ChatId(),
 		"crystaldolphin commands:\n/new — Start a new conversation\n/help — Show available commands",
@@ -300,7 +300,7 @@ func (loop *AgentLoop) handleCmdHelp(msg bus.AgentMessage) *bus.ChannelMessage {
 
 // createTurnContext decorates ctx with per-turn routing information and returns
 // a flag that is set to true when the message tool has sent a reply.
-func createTurnContext(ctx context.Context, msg bus.AgentMessage) context.Context {
+func createTurnContext(ctx context.Context, msg buslegacy.AgentMessage) context.Context {
 	msgId := ""
 	if v, ok := msg.Metadata()["message_id"].(string); ok {
 		msgId = v
@@ -311,12 +311,12 @@ func createTurnContext(ctx context.Context, msg bus.AgentMessage) context.Contex
 
 // progressCallback returns a function that pushes intermediate output to
 // the outbound bus so clients can display streaming progress.
-func (loop *AgentLoop) progressCallback(msg bus.AgentMessage) func(string) {
+func (loop *AgentLoop) progressCallback(msg buslegacy.AgentMessage) func(string) {
 	return func(content string) {
 		meta := map[string]any{"_progress": true}
 		maps.Copy(meta, msg.Metadata())
 
-		out := bus.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), content).
+		out := buslegacy.NewChannelMessageBuilder(msg.Channel(), msg.ChatId(), content).
 			Metadata(meta).
 			Build()
 

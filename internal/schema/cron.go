@@ -1,6 +1,6 @@
 package schema
 
-import "github.com/crystaldolphin/crystaldolphin/internal/bus"
+import "github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 
 // CronJobSummary is a lightweight view of a scheduled job used by the cron tool.
 type CronJobSummary struct {
@@ -15,7 +15,7 @@ type CronService interface {
 	AddJob(
 		name, message, kind string,
 		everyMs int64, cronExpr, tz string, atMs int64,
-		deliver bool, channel bus.Channel, to string, deleteAfterRun bool,
+		deliver bool, channel buslegacy.Channel, to string, deleteAfterRun bool,
 	) (id string, err error)
 	ListJobs() []CronJobSummary
 	RemoveJob(id string) bool

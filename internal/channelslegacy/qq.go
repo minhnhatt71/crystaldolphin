@@ -13,7 +13,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
@@ -32,7 +32,7 @@ type QQChannel struct {
 	seenQueue []string
 }
 
-func NewQQChannel(cfg *channel.QQConfig, b *bus.AgentBus) *QQChannel {
+func NewQQChannel(cfg *channel.QQConfig, b *buslegacy.AgentBus) *QQChannel {
 	return &QQChannel{
 		Base:       NewBase("qq", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -243,7 +243,7 @@ func (q *QQChannel) handleC2CMessage(payload map[string]any) {
 	})
 }
 
-func (q *QQChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
+func (q *QQChannel) Send(ctx context.Context, msg buslegacy.ChannelMessage) error {
 	token, err := q.getAccessToken(ctx)
 	if err != nil {
 		return err

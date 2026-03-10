@@ -14,7 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
@@ -28,7 +28,7 @@ type DingTalkChannel struct {
 	tokenExp   time.Time
 }
 
-func NewDingTalkChannel(cfg *channel.DingTalkConfig, b *bus.AgentBus) *DingTalkChannel {
+func NewDingTalkChannel(cfg *channel.DingTalkConfig, b *buslegacy.AgentBus) *DingTalkChannel {
 	return &DingTalkChannel{
 		Base:       NewBase("dingtalk", b, cfg.AllowFrom),
 		cfg:        cfg,
@@ -201,7 +201,7 @@ func (d *DingTalkChannel) handleFrame(frame map[string]any) {
 	})
 }
 
-func (d *DingTalkChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
+func (d *DingTalkChannel) Send(ctx context.Context, msg buslegacy.ChannelMessage) error {
 	token, err := d.getAccessToken(ctx)
 	if err != nil {
 		return err

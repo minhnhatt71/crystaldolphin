@@ -10,7 +10,7 @@ import (
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
@@ -23,7 +23,7 @@ type SlackChannel struct {
 	botUserID string
 }
 
-func NewSlackChannel(cfg *channel.SlackConfig, b *bus.AgentBus) *SlackChannel {
+func NewSlackChannel(cfg *channel.SlackConfig, b *buslegacy.AgentBus) *SlackChannel {
 	return &SlackChannel{
 		Base: NewBase("slack", b, nil), // Slack uses its own allow logic
 		cfg:  cfg,
@@ -188,7 +188,7 @@ func (s *SlackChannel) stripMention(text string) string {
 	return strings.TrimSpace(re.ReplaceAllString(text, ""))
 }
 
-func (s *SlackChannel) Send(ctx context.Context, msg bus.ChannelMessage) error {
+func (s *SlackChannel) Send(ctx context.Context, msg buslegacy.ChannelMessage) error {
 	if s.webClient == nil {
 		return nil
 	}

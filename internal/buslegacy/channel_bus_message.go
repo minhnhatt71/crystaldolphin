@@ -1,4 +1,4 @@
-package bus
+package buslegacy
 
 // ChannelMessage is a response to be sent back through a channel.
 type ChannelMessage struct {

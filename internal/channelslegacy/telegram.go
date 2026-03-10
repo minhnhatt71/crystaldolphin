@@ -14,7 +14,7 @@ import (
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 )
 
@@ -26,7 +26,7 @@ type TelegramChannel struct {
 }
 
 // NewTelegramChannel creates a TelegramChannel.
-func NewTelegramChannel(cfg *channel.TelegramConfig, b *bus.AgentBus) *TelegramChannel {
+func NewTelegramChannel(cfg *channel.TelegramConfig, b *buslegacy.AgentBus) *TelegramChannel {
 	return &TelegramChannel{
 		Base: NewBase("telegram", b, cfg.AllowFrom),
 		cfg:  cfg,
@@ -165,7 +165,7 @@ func (t *TelegramChannel) sendTypingLoop(ctx context.Context, chatID int64) {
 	}
 }
 
-func (t *TelegramChannel) Send(_ context.Context, msg bus.ChannelMessage) error {
+func (t *TelegramChannel) Send(_ context.Context, msg buslegacy.ChannelMessage) error {
 	if t.bot == nil {
 		return fmt.Errorf("telegram: bot not running")
 	}

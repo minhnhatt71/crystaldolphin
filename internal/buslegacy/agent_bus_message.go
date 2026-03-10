@@ -1,5 +1,5 @@
 // Package bus defines the message types that flow between channels and the agent.
-package bus
+package buslegacy
 
 import "time"
 

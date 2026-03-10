@@ -1,4 +1,4 @@
-package bus
+package buslegacy
 
 // AgentBus contains messages from channels to be consumed by agents
 type AgentBus struct {

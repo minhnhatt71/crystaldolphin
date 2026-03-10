@@ -1,4 +1,4 @@
-package bus
+package buslegacy
 
 // MessageBusManager groups the three message buses used across the system:
 //   - Agent: channels → agent (inbound)

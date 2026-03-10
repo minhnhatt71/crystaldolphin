@@ -1,4 +1,4 @@
-package bus
+package buslegacy
 
 import "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 

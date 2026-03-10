@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
@@ -141,7 +141,7 @@ func (pb *PromptContext) BuildMessages(
 	history schema.Messages,
 	currentMessage string,
 	media []string,
-	channel bus.Channel,
+	channel buslegacy.Channel,
 	chatID string,
 ) schema.Messages {
 	systemPrompt := pb.BuildSystemPrompt()

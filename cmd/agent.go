@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/channelslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
@@ -49,7 +49,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	ch, chatId := bus.ParseRoutingKey(key)
+	ch, chatId := buslegacy.ParseRoutingKey(key)
 
 	loop := container.AgentLoop()
 
@@ -63,11 +63,11 @@ func runAgent(cmd *cobra.Command, args []string) error {
 }
 
 // runSingleMessage sends one message to the agent and prints the response.
-func runSingleMessage(loop schema.AgentLooper, key string, channel bus.Channel, chatId string) error {
+func runSingleMessage(loop schema.AgentLooper, key string, channel buslegacy.Channel, chatId string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	msg := bus.NewAgentMessage(channel, "user", chatId, message, key)
+	msg := buslegacy.NewAgentMessage(channel, "user", chatId, message, key)
 
 	fmt.Fprintf(os.Stderr, "  ↳ thinking...\n")
 

@@ -22,7 +22,7 @@ import (
 
 	robfigcron "github.com/robfig/cron/v3"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
@@ -135,7 +135,7 @@ func (s *JobManager) Start(ctx context.Context) error {
 func (s *JobManager) AddJob(
 	name, message, kind string,
 	everyMs int64, cronExpr, tz string, atMs int64,
-	deliver bool, channel bus.Channel, to string, deleteAfterRun bool,
+	deliver bool, channel buslegacy.Channel, to string, deleteAfterRun bool,
 ) (string, error) {
 	sched := CronSchedule{Kind: kind}
 	switch kind {
@@ -258,7 +258,7 @@ func (s *JobManager) ListAllJobs(includeDisabled bool) []CronJob {
 // AddJobFull is the CLI-level add (takes a fully-formed CronJob minus ID/times).
 func (s *JobManager) AddJobFull(name, message, kind string, everyMs int64, cronExpr, tz string, atMs int64,
 	deliver bool, channel, to string, deleteAfterRun bool) (CronJob, error) {
-	id, err := s.AddJob(name, message, kind, everyMs, cronExpr, tz, atMs, deliver, bus.Channel(channel), to, deleteAfterRun)
+	id, err := s.AddJob(name, message, kind, everyMs, cronExpr, tz, atMs, deliver, buslegacy.Channel(channel), to, deleteAfterRun)
 	if err != nil {
 		return CronJob{}, err
 	}

@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/channelslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
@@ -71,26 +71,26 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 
 	cronManager.OnJobFunc(func(ctx context.Context, job cron.CronJob) (string, error) {
 		routingKey := "cron:" + job.ID
-		ch := bus.ChannelCLI
+		ch := buslegacy.ChannelCLI
 		chatId := "direct"
 		if job.Payload.Channel != nil {
-			ch = bus.Channel(*job.Payload.Channel)
+			ch = buslegacy.Channel(*job.Payload.Channel)
 		}
 		if job.Payload.To != nil {
 			chatId = *job.Payload.To
 		}
 
-		msg := bus.NewAgentMessage(ch, bus.SenderIdCLI, chatId, job.Payload.Message, routingKey)
+		msg := buslegacy.NewAgentMessage(ch, buslegacy.SenderIdCLI, chatId, job.Payload.Message, routingKey)
 		resp := agentLoop.ProcessDirect(ctx, msg)
 		if job.Payload.Deliver && job.Payload.To != nil {
-			channelBus.Publish(bus.NewChannelMessage(ch, chatId, resp))
+			channelBus.Publish(buslegacy.NewChannelMessage(ch, chatId, resp))
 		}
 		return resp, nil
 	})
 
 	heartbeat := heartbeat.NewService(cfg.WorkspacePath(),
 		func(ctx context.Context, content string) error {
-			agentLoop.ProcessDirect(ctx, bus.NewAgentMessage(bus.ChannelHeartbeat, bus.SenderIdCLI, "direct", content, "heartbeat:direct"))
+			agentLoop.ProcessDirect(ctx, buslegacy.NewAgentMessage(buslegacy.ChannelHeartbeat, buslegacy.SenderIdCLI, "direct", content, "heartbeat:direct"))
 			return nil
 		},
 		0,

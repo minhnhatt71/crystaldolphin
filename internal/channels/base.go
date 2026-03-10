@@ -5,19 +5,19 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
 
 // Base holds common state and helper methods shared by all channels.
 type Base struct {
 	channelName channel.ChannelName
-	agentBus    *bus.AgentBus
+	agentBus    *buslegacy.AgentBus
 	allowFrom   []string // empty = allow all
 }
 
 // NewBase creates a Base with the given channel name, bus, and allowlist.
-func NewBase(name channel.ChannelName, b *bus.AgentBus, allowFrom []string) Base {
+func NewBase(name channel.ChannelName, b *buslegacy.AgentBus, allowFrom []string) Base {
 	return Base{channelName: name, agentBus: b, allowFrom: allowFrom}
 }
 
@@ -60,8 +60,8 @@ func (b *Base) HandleMessage(
 		return
 	}
 
-	message := bus.
-		NewAgentMessageBuilder(bus.Channel(b.channelName), senderId, chatId, content).
+	message := buslegacy.
+		NewAgentMessageBuilder(buslegacy.Channel(b.channelName), senderId, chatId, content).
 		Media(media).
 		Metadata(metadata).
 		Build()

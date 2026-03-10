@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 	"github.com/crystaldolphin/crystaldolphin/internal/shared/cmdutils"
 )
@@ -25,11 +25,11 @@ var cliExitCommands = map[string]bool{
 // replies are printed to stdout via the ConsoleBus.
 type CLIChannel struct {
 	Base
-	console *bus.ConsoleBus
+	console *buslegacy.ConsoleBus
 }
 
 // NewCLIChannel creates a CLIChannel.
-func NewCLIChannel(inbound *bus.AgentBus, console *bus.ConsoleBus) *CLIChannel {
+func NewCLIChannel(inbound *buslegacy.AgentBus, console *buslegacy.ConsoleBus) *CLIChannel {
 	return &CLIChannel{
 		Base:    NewBase(channel.ChannelCLI, inbound, nil),
 		console: console,
@@ -74,7 +74,7 @@ func (c *CLIChannel) Start(ctx context.Context) error {
 			return nil
 		}
 
-		c.HandleMessage(bus.SenderIdCLI, "direct", line, nil, nil)
+		c.HandleMessage(buslegacy.SenderIdCLI, "direct", line, nil, nil)
 		c.waitForReply(ctx)
 	}
 }

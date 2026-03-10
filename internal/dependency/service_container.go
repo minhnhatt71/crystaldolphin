@@ -6,7 +6,7 @@ import (
 	"go.uber.org/dig"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/agentlegacy"
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 	"github.com/crystaldolphin/crystaldolphin/internal/mcp"
@@ -20,15 +20,15 @@ import (
 // Callers use the typed getter methods; they never need to import dig directly.
 type ServiceContainer struct {
 	provider schema.LLMProvider
-	buses    *bus.MessageBusManager
+	buses    *buslegacy.MessageBusManager
 	loop     schema.AgentLooper
 	cronSvc  *cron.JobManager
 }
 
-func (c *ServiceContainer) Provider() schema.LLMProvider  { return c.provider }
-func (c *ServiceContainer) Buses() *bus.MessageBusManager { return c.buses }
-func (c *ServiceContainer) AgentLoop() schema.AgentLooper { return c.loop }
-func (c *ServiceContainer) CronService() *cron.JobManager { return c.cronSvc }
+func (c *ServiceContainer) Provider() schema.LLMProvider        { return c.provider }
+func (c *ServiceContainer) Buses() *buslegacy.MessageBusManager { return c.buses }
+func (c *ServiceContainer) AgentLoop() schema.AgentLooper       { return c.loop }
+func (c *ServiceContainer) CronService() *cron.JobManager       { return c.cronSvc }
 
 // LLMModel is a named string type so dig can distinguish it from plain
 // strings when injecting the effective model name into providers that need it.
@@ -58,10 +58,10 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	if err := d.Provide(newMessageBusManager); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(func(m *bus.MessageBusManager) *bus.AgentBus { return m.AgentBus() }); err != nil {
+	if err := d.Provide(func(m *buslegacy.MessageBusManager) *buslegacy.AgentBus { return m.AgentBus() }); err != nil {
 		return nil, err
 	}
-	if err := d.Provide(func(m *bus.MessageBusManager) *bus.ChannelBus { return m.ChannelBus() }); err != nil {
+	if err := d.Provide(func(m *buslegacy.MessageBusManager) *buslegacy.ChannelBus { return m.ChannelBus() }); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newSessionManager); err != nil {
@@ -104,7 +104,7 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	var result *ServiceContainer
 	err := d.Invoke(func(
 		provider schema.LLMProvider,
-		buses *bus.MessageBusManager,
+		buses *buslegacy.MessageBusManager,
 		loop schema.AgentLooper,
 		cronSvc *cron.JobManager,
 	) {
@@ -151,8 +151,8 @@ func isOAuthProvider(name string) bool {
 	return spec != nil && spec.IsOAuth
 }
 
-func newMessageBusManager() *bus.MessageBusManager {
-	return bus.NewMessageBusManager(100)
+func newMessageBusManager() *buslegacy.MessageBusManager {
+	return buslegacy.NewMessageBusManager(100)
 }
 
 func newSessionManager(cfg *config.Config) (*session.Manager, error) {
@@ -219,13 +219,13 @@ func newAgentFactory(
 	return agentlegacy.NewFactory(p, coreSettings, subSettings, subReg.Registry, mcpMgr, cfg.WorkspacePath())
 }
 
-func newSubagentManager(factory *agentlegacy.AgentFactory, inbound *bus.AgentBus) *agentlegacy.SubagentManager {
+func newSubagentManager(factory *agentlegacy.AgentFactory, inbound *buslegacy.AgentBus) *agentlegacy.SubagentManager {
 	return agentlegacy.NewSubagentManager(factory, inbound)
 }
 
 func newAgentRegistry(
 	cfg *config.Config,
-	outbound *bus.ChannelBus,
+	outbound *buslegacy.ChannelBus,
 	subMgr *agentlegacy.SubagentManager,
 	cronMgr *cron.JobManager,
 	mem schema.MemoryStore,
@@ -278,8 +278,8 @@ func newMCPManager(cfg *config.Config) *mcp.Manager {
 }
 
 func newAgentLoop(
-	inbound *bus.AgentBus,
-	outbound *bus.ChannelBus,
+	inbound *buslegacy.AgentBus,
+	outbound *buslegacy.ChannelBus,
 	factory *agentlegacy.AgentFactory,
 	cfg *config.Config,
 	m LLMModel,

@@ -1,4 +1,4 @@
-package bus
+package buslegacy
 
 type Channel string
 

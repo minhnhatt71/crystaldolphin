@@ -4,14 +4,14 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 )
 
 // turnContext carries per-turn routing metadata through the context tree.
 // It is set by the agent loop once per message and read by stateful tools
 // (message, spawn, cron) inside Execute
 type turnContext struct {
-	channel   bus.Channel
+	channel   buslegacy.Channel
 	chatId    string
 	messageId string
 	published *atomic.Bool
@@ -20,7 +20,7 @@ type turnContext struct {
 type turnKey struct{}
 
 // WithTurn returns a child context that carries tc.
-func WithTurn(ctx context.Context, channel bus.Channel, chatId, msgID string) context.Context {
+func WithTurn(ctx context.Context, channel buslegacy.Channel, chatId, msgID string) context.Context {
 	return context.WithValue(ctx, turnKey{}, &turnContext{
 		channel:   channel,
 		chatId:    chatId,
