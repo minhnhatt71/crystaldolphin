@@ -1,5 +1,5 @@
 // Package channels provides chat-platform channel implementations.
-package channels
+package channelslegacy
 
 import (
 	"log/slog"

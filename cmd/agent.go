@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/channels"
+	"github.com/crystaldolphin/crystaldolphin/internal/channelslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
@@ -57,7 +57,7 @@ func runAgent(cmd *cobra.Command, args []string) error {
 		return runSingleMessage(loop, key, ch, chatId)
 	}
 
-	manager := channels.NewManager(cfg, container.Buses())
+	manager := channelslegacy.NewManager(cfg, container.Buses())
 
 	return runInteractive(loop, manager)
 }
@@ -79,7 +79,7 @@ func runSingleMessage(loop schema.AgentLooper, key string, channel bus.Channel, 
 }
 
 // runInteractive starts the agent loop and delegates the REPL to CLIChannel.
-func runInteractive(loop schema.AgentLooper, manager *channels.Manager) error {
+func runInteractive(loop schema.AgentLooper, manager *channelslegacy.Manager) error {
 	fmt.Printf("%s Interactive mode (type 'exit' or Ctrl+C to quit)\n\n", logo)
 
 	ctx, cancel := context.WithCancel(context.Background())

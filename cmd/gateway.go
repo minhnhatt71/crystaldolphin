@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/channels"
+	"github.com/crystaldolphin/crystaldolphin/internal/channelslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
@@ -102,7 +102,7 @@ func runGatewayStart(_ *cobra.Command, _ []string) error {
 
 	g, gctx := errgroup.WithContext(ctx)
 
-	channelManager := channels.NewManager(cfg, svc.Buses())
+	channelManager := channelslegacy.NewManager(cfg, svc.Buses())
 	if enabled := channelManager.EnabledChannels(); len(enabled) > 0 {
 		fmt.Printf("✓ Channels enabled: %s\n", strings.Join(enabled, ", "))
 	} else {
