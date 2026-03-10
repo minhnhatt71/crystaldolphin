@@ -1,4 +1,4 @@
-package channelslegacy
+package channels
 
 import (
 	"bufio"
@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
+	"github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 	"github.com/crystaldolphin/crystaldolphin/internal/shared/cmdutils"
 )
 
@@ -31,12 +31,12 @@ type CLIChannel struct {
 // NewCLIChannel creates a CLIChannel.
 func NewCLIChannel(inbound *bus.AgentBus, console *bus.ConsoleBus) *CLIChannel {
 	return &CLIChannel{
-		Base:    NewBase(bus.ChannelCLI, inbound, nil),
+		Base:    NewBase(channel.ChannelCLI, inbound, nil),
 		console: console,
 	}
 }
 
-func (c *CLIChannel) Name() string { return string(bus.ChannelCLI) }
+func (c *CLIChannel) Name() channel.ChannelName { return channel.ChannelCLI }
 
 // Start runs the stdin REPL: reads lines, dispatches them to the agent via the
 // inbound bus, and prints each reply received on the console bus.
@@ -99,12 +99,7 @@ func (c *CLIChannel) waitForReply(ctx context.Context) {
 
 // Send delivers an outbound agent reply to the CLI by publishing it onto the
 // console bus. The Start loop drains the console bus and prints to stdout.
-func (c *CLIChannel) Send(_ context.Context, msg bus.ChannelMessage) error {
-	c.console.Publish(
-		channelmodel.NewMessage(msg.ChatId(), msg.Content()).
-			WithReplyTo(msg.ReplyTo()).
-			WithMedia(msg.Media()).
-			WithMetadata(msg.Metadata()),
-	)
+func (c *CLIChannel) Send(_ context.Context, msg channel.Message) error {
+	c.console.Publish(msg)
 	return nil
 }

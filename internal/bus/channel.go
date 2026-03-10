@@ -11,6 +11,7 @@ const (
 	ChannelDingTalk  Channel = "dingtalk"
 	ChannelEmail     Channel = "email"
 	ChannelMochat    Channel = "mochat"
+	ChannelQQ        Channel = "qq"
 	ChannelCLI       Channel = "cli"
 	ChannelCron      Channel = "cron"
 	ChannelHeartbeat Channel = "heartbeat"
