@@ -7,10 +7,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
+	modelbus "github.com/crystaldolphin/crystaldolphin/internal/modeling/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 	"github.com/crystaldolphin/crystaldolphin/internal/shared/cmdutils"
 )
+
+const senderIDCLI = "user"
 
 var cliExitCommands = map[string]bool{
 	"exit":  true,
@@ -21,25 +24,28 @@ var cliExitCommands = map[string]bool{
 }
 
 // CLIChannel wires the terminal (stdin/stdout) into the channel manager so
-// that interactive console input reaches the agent via the AgentBus and agent
-// replies are printed to stdout via the ConsoleBus.
+// that interactive console input reaches the agent via the InboundBus and agent
+// replies are printed to stdout via a private console channel.
 type CLIChannel struct {
 	Base
-	console *buslegacy.ConsoleBus
+	console chan modelbus.OutboundMessage
 }
 
 // NewCLIChannel creates a CLIChannel.
-func NewCLIChannel(inbound *buslegacy.AgentBus, console *buslegacy.ConsoleBus) *CLIChannel {
+// inbound is the shared agent inbound bus; outbound is accepted for interface
+// compatibility but CLI replies flow through an internal console channel so they
+// are not consumed by the manager's dispatchOutbound goroutine.
+func NewCLIChannel(inbound *bus.InboundBus, _ *bus.OutboundBus) *CLIChannel {
 	return &CLIChannel{
 		Base:    NewBase(channel.ChannelCLI, inbound, nil),
-		console: console,
+		console: make(chan modelbus.OutboundMessage, 8),
 	}
 }
 
 func (c *CLIChannel) Name() channel.ChannelName { return channel.ChannelCLI }
 
 // Start runs the stdin REPL: reads lines, dispatches them to the agent via the
-// inbound bus, and prints each reply received on the console bus.
+// inbound bus, and prints each reply received on the outbound bus.
 // Blocks until ctx is cancelled or stdin is closed.
 func (c *CLIChannel) Start(ctx context.Context) error {
 	fmt.Printf("CLI channel ready. Type 'exit' or press Ctrl+C to quit.\n\n")
@@ -74,17 +80,17 @@ func (c *CLIChannel) Start(ctx context.Context) error {
 			return nil
 		}
 
-		c.HandleMessage(buslegacy.SenderIdCLI, "direct", line, nil, nil)
+		c.HandleMessage(senderIDCLI, "direct", line, nil, nil)
 		c.waitForReply(ctx)
 	}
 }
 
 // waitForReply blocks until the agent publishes a non-progress reply on the
-// console bus, then prints it.
+// outbound bus, then prints it.
 func (c *CLIChannel) waitForReply(ctx context.Context) {
 	for {
 		select {
-		case msg := <-c.console.Subscribe():
+		case msg := <-c.console:
 			if prog, _ := msg.Metadata()["_progress"].(bool); prog {
 				fmt.Printf("  ↳ %s\n", msg.Content())
 				continue
@@ -98,8 +104,12 @@ func (c *CLIChannel) waitForReply(ctx context.Context) {
 }
 
 // Send delivers an outbound agent reply to the CLI by publishing it onto the
-// console bus. The Start loop drains the console bus and prints to stdout.
+// outbound bus. The Start loop drains the outbound bus and prints to stdout.
 func (c *CLIChannel) Send(_ context.Context, msg channel.Message) error {
-	c.console.Publish(msg)
+	out := modelbus.NewOutboundMessage(channel.ChannelCLI, msg.ChatId(), msg.Content()).
+		WithReplyTo(msg.ReplyTo()).
+		WithMedia(msg.Media()).
+		WithMetadata(msg.Metadata())
+	c.console <- out
 	return nil
 }

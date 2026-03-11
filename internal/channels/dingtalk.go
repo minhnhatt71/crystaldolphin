@@ -14,7 +14,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
@@ -29,7 +29,7 @@ type DingTalkChannel struct {
 	tokenExp   time.Time
 }
 
-func NewDingTalkChannel(cfg *channel.DingTalkConfig, b *buslegacy.AgentBus) *DingTalkChannel {
+func NewDingTalkChannel(cfg *channel.DingTalkConfig, b *bus.InboundBus) *DingTalkChannel {
 	return &DingTalkChannel{
 		Base:       NewBase(channelmodel.ChannelDingTalk, b, cfg.AllowFrom),
 		cfg:        cfg,

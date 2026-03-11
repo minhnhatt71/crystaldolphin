@@ -15,7 +15,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
@@ -34,7 +34,7 @@ type DiscordChannel struct {
 	seq        *int
 }
 
-func NewDiscordChannel(cfg *channel.DiscordConfig, b *buslegacy.AgentBus) *DiscordChannel {
+func NewDiscordChannel(cfg *channel.DiscordConfig, b *bus.InboundBus) *DiscordChannel {
 	return &DiscordChannel{
 		Base:       NewBase(channelmodel.ChannelDiscord, b, cfg.AllowFrom),
 		cfg:        cfg,

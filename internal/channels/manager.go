@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config"
 	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
@@ -15,63 +15,63 @@ var _ channelmodel.Manager = (*Manager)(nil)
 
 // Manager owns all enabled channels and routes outbound messages.
 type Manager struct {
-	channels   map[channelmodel.ChannelName]channelmodel.Channel
-	channelBus *buslegacy.ChannelBus
+	channels map[channelmodel.ChannelName]channelmodel.Channel
+	msgBus   *bus.MessageBus
 }
 
 // NewManager creates a Manager and initialises all enabled channels.
-func NewManager(cfg *config.Config, buses *buslegacy.MessageBusManager) *Manager {
+func NewManager(cfg *config.Config, msgBus *bus.MessageBus) *Manager {
 	m := &Manager{
-		channels:   make(map[channelmodel.ChannelName]channelmodel.Channel),
-		channelBus: buses.ChannelBus(),
+		channels: make(map[channelmodel.ChannelName]channelmodel.Channel),
+		msgBus:   msgBus,
 	}
 
-	cli := NewCLIChannel(buses.AgentBus(), buses.ConsoleBus())
+	cli := NewCLIChannel(msgBus.Inbound(), msgBus.Outbound())
 	m.Register(cli)
 	slog.Info("channel enabled", "name", cli.Name())
 
 	if cfg.Channels.Telegram.Enabled {
-		ch := NewTelegramChannel(&cfg.Channels.Telegram, buses.AgentBus())
+		ch := NewTelegramChannel(&cfg.Channels.Telegram, msgBus.Inbound())
 		m.Register(ch)
 		slog.Info("channel enabled", "name", ch.Name())
 	}
 	if cfg.Channels.WhatsApp.Enabled {
-		ch := NewWhatsAppChannel(&cfg.Channels.WhatsApp, buses.AgentBus())
+		ch := NewWhatsAppChannel(&cfg.Channels.WhatsApp, msgBus.Inbound())
 		m.Register(ch)
 		slog.Info("channel enabled", "name", ch.Name())
 	}
 	if cfg.Channels.Discord.Enabled {
-		ch := NewDiscordChannel(&cfg.Channels.Discord, buses.AgentBus())
+		ch := NewDiscordChannel(&cfg.Channels.Discord, msgBus.Inbound())
 		m.Register(ch)
 		slog.Info("channel enabled", "name", ch.Name())
 	}
 	if cfg.Channels.Slack.Enabled {
-		ch := NewSlackChannel(&cfg.Channels.Slack, buses.AgentBus())
+		ch := NewSlackChannel(&cfg.Channels.Slack, msgBus.Inbound())
 		m.Register(ch)
 		slog.Info("channel enabled", "name", ch.Name())
 	}
 	if cfg.Channels.Feishu.Enabled {
-		ch := NewFeishuChannel(&cfg.Channels.Feishu, buses.AgentBus())
+		ch := NewFeishuChannel(&cfg.Channels.Feishu, msgBus.Inbound())
 		m.Register(ch)
 		slog.Info("channel enabled", "name", ch.Name())
 	}
 	if cfg.Channels.DingTalk.Enabled {
-		ch := NewDingTalkChannel(&cfg.Channels.DingTalk, buses.AgentBus())
+		ch := NewDingTalkChannel(&cfg.Channels.DingTalk, msgBus.Inbound())
 		m.Register(ch)
 		slog.Info("channel enabled", "name", ch.Name())
 	}
 	if cfg.Channels.Email.Enabled {
-		ch := NewEmailChannel(&cfg.Channels.Email, buses.AgentBus())
+		ch := NewEmailChannel(&cfg.Channels.Email, msgBus.Inbound())
 		m.Register(ch)
 		slog.Info("channel enabled", "name", ch.Name())
 	}
 	if cfg.Channels.Mochat.Enabled {
-		ch := NewMochatChannel(&cfg.Channels.Mochat, buses.AgentBus())
+		ch := NewMochatChannel(&cfg.Channels.Mochat, msgBus.Inbound())
 		m.Register(ch)
 		slog.Info("channel enabled", "name", ch.Name())
 	}
 	if cfg.Channels.QQ.Enabled {
-		ch := NewQQChannel(&cfg.Channels.QQ, buses.AgentBus())
+		ch := NewQQChannel(&cfg.Channels.QQ, msgBus.Inbound())
 		m.Register(ch)
 		slog.Info("channel enabled", "name", ch.Name())
 	}
@@ -120,23 +120,19 @@ func (m *Manager) Send(ctx context.Context, channelName string, msg channelmodel
 	return ch.Send(ctx, msg)
 }
 
-// dispatchOutbound reads from ChannelBus and routes each message to the
+// dispatchOutbound reads OutboundMessages from the bus and routes each to the
 // appropriate channel's Send method.
 func (m *Manager) dispatchOutbound(ctx context.Context) {
 	for {
 		select {
-		case busMsg := <-m.channelBus.Subscribe():
-			ch, ok := m.channels[channelmodel.ChannelName(busMsg.Channel())]
+		case busMsg := <-m.msgBus.Outbound().Subscribe():
+			ch, ok := m.channels[busMsg.ChannelName()]
 			if !ok {
-				slog.Debug("unknown channel for outbound message", "channel", busMsg.Channel())
+				slog.Debug("unknown channel for outbound message", "channel", busMsg.ChannelName())
 				continue
 			}
-			msg := channelmodel.NewMessage(busMsg.ChatId(), busMsg.Content()).
-				WithReplyTo(busMsg.ReplyTo()).
-				WithMedia(busMsg.Media()).
-				WithMetadata(busMsg.Metadata())
-			if err := ch.Send(ctx, msg); err != nil {
-				slog.Error("send error", "channel", busMsg.Channel(), "err", err)
+			if err := ch.Send(ctx, busMsg.ToChannelMessage()); err != nil {
+				slog.Error("send error", "channel", busMsg.ChannelName(), "err", err)
 			}
 		case <-ctx.Done():
 			return

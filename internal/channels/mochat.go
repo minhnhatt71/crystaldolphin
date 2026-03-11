@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
@@ -28,7 +28,7 @@ type MochatChannel struct {
 	seenQueue  []string
 }
 
-func NewMochatChannel(cfg *channel.MochatConfig, b *buslegacy.AgentBus) *MochatChannel {
+func NewMochatChannel(cfg *channel.MochatConfig, b *bus.InboundBus) *MochatChannel {
 	return &MochatChannel{
 		Base:       NewBase(channelmodel.ChannelMochat, b, cfg.AllowFrom),
 		cfg:        cfg,

@@ -13,7 +13,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
@@ -31,7 +31,7 @@ type QQChannel struct {
 	seenQueue  []string
 }
 
-func NewQQChannel(cfg *channel.QQConfig, b *buslegacy.AgentBus) *QQChannel {
+func NewQQChannel(cfg *channel.QQConfig, b *bus.InboundBus) *QQChannel {
 	return &QQChannel{
 		Base:       NewBase(channelmodel.ChannelQQ, b, cfg.AllowFrom),
 		cfg:        cfg,

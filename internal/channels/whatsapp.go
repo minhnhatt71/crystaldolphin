@@ -9,7 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/config/channel"
 	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
@@ -22,7 +22,7 @@ type WhatsAppChannel struct {
 	connected bool
 }
 
-func NewWhatsAppChannel(cfg *channel.WhatsAppConfig, b *buslegacy.AgentBus) *WhatsAppChannel {
+func NewWhatsAppChannel(cfg *channel.WhatsAppConfig, b *bus.InboundBus) *WhatsAppChannel {
 	return &WhatsAppChannel{
 		Base: NewBase(channelmodel.ChannelWhatsApp, b, cfg.AllowFrom),
 		cfg:  cfg,

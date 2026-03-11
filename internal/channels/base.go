@@ -5,20 +5,21 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
+	"github.com/crystaldolphin/crystaldolphin/internal/bus"
 	"github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
+	modelbus "github.com/crystaldolphin/crystaldolphin/internal/modeling/bus"
 )
 
 // Base holds common state and helper methods shared by all channels.
 type Base struct {
 	channelName channel.ChannelName
-	agentBus    *buslegacy.AgentBus
+	inbound     *bus.InboundBus
 	allowFrom   []string // empty = allow all
 }
 
-// NewBase creates a Base with the given channel name, bus, and allowlist.
-func NewBase(name channel.ChannelName, b *buslegacy.AgentBus, allowFrom []string) Base {
-	return Base{channelName: name, agentBus: b, allowFrom: allowFrom}
+// NewBase creates a Base with the given channel name, inbound bus, and allowlist.
+func NewBase(name channel.ChannelName, inbound *bus.InboundBus, allowFrom []string) Base {
+	return Base{channelName: name, inbound: inbound, allowFrom: allowFrom}
 }
 
 // IsAllowed checks whether senderID is on the allowlist.
@@ -49,24 +50,22 @@ func (b *Base) IsAllowed(senderID string) bool {
 	return false
 }
 
-// HandleMessage verifies the sender is allowed, then pushes an AgentMessage to the bus.
+// HandleMessage verifies the sender is allowed, then pushes an InboundMessage to the bus.
 func (b *Base) HandleMessage(
-	senderId, chatId, content string,
+	senderID, chatID, content string,
 	media []string,
 	metadata map[string]any,
 ) {
-	if !b.IsAllowed(senderId) {
-		slog.Warn("access denied", "channel", b.channelName, "sender", senderId)
+	if !b.IsAllowed(senderID) {
+		slog.Warn("access denied", "channel", b.channelName, "sender", senderID)
 		return
 	}
 
-	message := buslegacy.
-		NewAgentMessageBuilder(buslegacy.Channel(b.channelName), senderId, chatId, content).
-		Media(media).
-		Metadata(metadata).
-		Build()
+	msg := modelbus.NewInboundMessage(b.channelName, senderID, chatID, content, "").
+		WithMedia(media).
+		WithMetadata(metadata)
 
-	b.agentBus.Publish(message)
+	b.inbound.Publish(msg)
 }
 
 // splitMessage splits content into chunks that fit within maxLen,
