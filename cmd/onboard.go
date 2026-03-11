@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/configlegacy"
 )
 
 var onboardCmd = &cobra.Command{
@@ -17,30 +17,30 @@ var onboardCmd = &cobra.Command{
 }
 
 func runOnboard(_ *cobra.Command, _ []string) error {
-	cfgPath := config.ConfigPath()
+	cfgPath := configlegacy.ConfigPath()
 
 	if _, err := os.Stat(cfgPath); err == nil {
 		fmt.Printf("Config already exists at %s\n", cfgPath)
 		fmt.Printf("Press Enter to refresh (keep existing values) or Ctrl+C to cancel: ")
 		fmt.Scanln()
-		existing, loadErr := config.Load(cfgPath)
+		existing, loadErr := configlegacy.Load(cfgPath)
 		if loadErr != nil {
-			def := config.DefaultConfig()
+			def := configlegacy.DefaultConfig()
 			existing = &def
 		}
-		if err := config.Save(existing, cfgPath); err != nil {
+		if err := configlegacy.Save(existing, cfgPath); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Config refreshed at %s\n", cfgPath)
 	} else {
-		cfg := config.DefaultConfig()
-		if err := config.Save(&cfg, cfgPath); err != nil {
+		cfg := configlegacy.DefaultConfig()
+		if err := configlegacy.Save(&cfg, cfgPath); err != nil {
 			return err
 		}
 		fmt.Printf("✓ Created config at %s\n", cfgPath)
 	}
 
-	def := config.DefaultConfig()
+	def := configlegacy.DefaultConfig()
 	workspace := def.WorkspacePath()
 	if err := os.MkdirAll(workspace, 0o755); err != nil {
 		return fmt.Errorf("create workspace: %w", err)

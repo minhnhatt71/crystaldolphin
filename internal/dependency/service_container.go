@@ -7,7 +7,7 @@ import (
 
 	"github.com/crystaldolphin/crystaldolphin/internal/agentlegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/configlegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 	"github.com/crystaldolphin/crystaldolphin/internal/mcp"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
@@ -43,10 +43,10 @@ type AgentRegistry struct{ *tools.Registry }
 type SubagentRegistry struct{ *tools.Registry }
 
 // New builds and wires all core services from cfg.
-func New(cfg *config.Config) (*ServiceContainer, error) {
+func New(cfg *configlegacy.Config) (*ServiceContainer, error) {
 	d := dig.New()
 
-	if err := d.Provide(func() *config.Config { return cfg }); err != nil {
+	if err := d.Provide(func() *configlegacy.Config { return cfg }); err != nil {
 		return nil, err
 	}
 	if err := d.Provide(newProvider); err != nil {
@@ -118,12 +118,12 @@ func New(cfg *config.Config) (*ServiceContainer, error) {
 	return result, err
 }
 
-func newProvider(cfg *config.Config) (schema.LLMProvider, error) {
+func newProvider(cfg *configlegacy.Config) (schema.LLMProvider, error) {
 	model := cfg.Agents.Defaults.Model
 	result := cfg.MatchProvider(model)
 
 	if result.Provider == nil && !isOAuthProvider(result.Name) {
-		return nil, fmt.Errorf("no API key configured for model %q — edit %s", model, config.ConfigPath())
+		return nil, fmt.Errorf("no API key configured for model %q — edit %s", model, configlegacy.ConfigPath())
 	}
 
 	apiKey := ""
@@ -155,17 +155,17 @@ func newMessageBusManager() *buslegacy.MessageBusManager {
 	return buslegacy.NewMessageBusManager(100)
 }
 
-func newSessionManager(cfg *config.Config) (*session.Manager, error) {
+func newSessionManager(cfg *configlegacy.Config) (*session.Manager, error) {
 	return session.NewManager(cfg.WorkspacePath())
 }
 
-func newCronService(cfg *config.Config) *cron.JobManager {
-	cronPath := config.DataDir() + "/cron/jobs.json"
+func newCronService(cfg *configlegacy.Config) *cron.JobManager {
+	cronPath := configlegacy.DataDir() + "/cron/jobs.json"
 	_ = cfg // reserved for future per-config cron settings
 	return cron.NewService(cronPath)
 }
 
-func resolveLLMModel(cfg *config.Config, p schema.LLMProvider) LLMModel {
+func resolveLLMModel(cfg *configlegacy.Config, p schema.LLMProvider) LLMModel {
 	m := cfg.Agents.Defaults.Model
 	if m == "" {
 		m = p.DefaultModel()
@@ -174,7 +174,7 @@ func resolveLLMModel(cfg *config.Config, p schema.LLMProvider) LLMModel {
 	return LLMModel(m)
 }
 
-func newSubAgentToolRegistry(cfg *config.Config) SubagentRegistry {
+func newSubAgentToolRegistry(cfg *configlegacy.Config) SubagentRegistry {
 	workspace := cfg.WorkspacePath()
 	allowedDir := ""
 	if cfg.Tools.RestrictToWorkspace {
@@ -195,7 +195,7 @@ func newSubAgentToolRegistry(cfg *config.Config) SubagentRegistry {
 
 func newAgentFactory(
 	p schema.LLMProvider,
-	cfg *config.Config,
+	cfg *configlegacy.Config,
 	m LLMModel,
 	subReg SubagentRegistry,
 	mcpMgr *mcp.Manager,
@@ -224,7 +224,7 @@ func newSubagentManager(factory *agentlegacy.AgentFactory, inbound *buslegacy.Ag
 }
 
 func newAgentRegistry(
-	cfg *config.Config,
+	cfg *configlegacy.Config,
 	outbound *buslegacy.ChannelBus,
 	subMgr *agentlegacy.SubagentManager,
 	cronMgr *cron.JobManager,
@@ -253,7 +253,7 @@ func newAgentRegistry(
 	return AgentRegistry{registry}
 }
 
-func newMemoryStore(cfg *config.Config) (schema.MemoryStore, error) {
+func newMemoryStore(cfg *configlegacy.Config) (schema.MemoryStore, error) {
 	mem, err := agentlegacy.NewMemoryStore(cfg.WorkspacePath())
 	if err != nil || mem == nil {
 		return &agentlegacy.FileMemoryStore{}, nil
@@ -261,19 +261,19 @@ func newMemoryStore(cfg *config.Config) (schema.MemoryStore, error) {
 	return mem, nil
 }
 
-func newCompactor(cfg *config.Config, mem schema.MemoryStore, saver *session.Manager, p schema.LLMProvider, m LLMModel, reg AgentRegistry) schema.MemoryCompactor {
+func newCompactor(cfg *configlegacy.Config, mem schema.MemoryStore, saver *session.Manager, p schema.LLMProvider, m LLMModel, reg AgentRegistry) schema.MemoryCompactor {
 	return agentlegacy.NewCompactor(mem, saver, p, string(m), cfg.Agents.Defaults.MemoryWindow, reg.Registry)
 }
 
-func newSkillsLoader(cfg *config.Config) schema.SkillLoader {
+func newSkillsLoader(cfg *configlegacy.Config) schema.SkillLoader {
 	return agentlegacy.NewSkillsLoader(cfg.WorkspacePath(), "")
 }
 
-func newContextBuilder(cfg *config.Config, mem schema.MemoryStore, sl schema.SkillLoader) *agentlegacy.PromptContext {
+func newContextBuilder(cfg *configlegacy.Config, mem schema.MemoryStore, sl schema.SkillLoader) *agentlegacy.PromptContext {
 	return agentlegacy.NewContextBuilder(cfg.WorkspacePath(), mem, sl)
 }
 
-func newMCPManager(cfg *config.Config) *mcp.Manager {
+func newMCPManager(cfg *configlegacy.Config) *mcp.Manager {
 	return mcp.NewManager(cfg.Tools.MCPServers)
 }
 
@@ -281,7 +281,7 @@ func newAgentLoop(
 	inbound *buslegacy.AgentBus,
 	outbound *buslegacy.ChannelBus,
 	factory *agentlegacy.AgentFactory,
-	cfg *config.Config,
+	cfg *configlegacy.Config,
 	m LLMModel,
 	sessions *session.Manager,
 	consolidator schema.MemoryCompactor,

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/bus"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/configlegacy"
 	channelmodel "github.com/crystaldolphin/crystaldolphin/internal/modeling/channel"
 )
 
@@ -20,7 +20,7 @@ type Manager struct {
 }
 
 // NewManager creates a Manager and initialises all enabled channels.
-func NewManager(cfg *config.Config, msgBus *bus.MessageBus) *Manager {
+func NewManager(cfg *configlegacy.Config, msgBus *bus.MessageBus) *Manager {
 	m := &Manager{
 		channels: make(map[channelmodel.ChannelName]channelmodel.Channel),
 		msgBus:   msgBus,

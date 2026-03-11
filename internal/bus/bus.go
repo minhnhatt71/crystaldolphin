@@ -23,26 +23,6 @@ func New(cap int) *MessageBus {
 	}
 }
 
-// PublishInbound delivers an inbound message from a channel to the agent.
-func (b *MessageBus) PublishInbound(msg modelbus.InboundMessage) {
-	b.inbound.Publish(msg)
-}
-
-// SubscribeInbound returns the read-only channel the agent reads.
-func (b *MessageBus) SubscribeInbound() <-chan modelbus.InboundMessage {
-	return b.inbound.Subscribe()
-}
-
-// PublishOutbound delivers an outbound reply from the agent to the channel manager.
-func (b *MessageBus) PublishOutbound(msg modelbus.OutboundMessage) {
-	b.outbound.Publish(msg)
-}
-
-// SubscribeOutbound returns the read-only channel the manager reads.
-func (b *MessageBus) SubscribeOutbound() <-chan modelbus.OutboundMessage {
-	return b.outbound.Subscribe()
-}
-
 // Inbound returns the underlying InboundBus for direct use.
 func (b *MessageBus) Inbound() *InboundBus { return b.inbound }
 

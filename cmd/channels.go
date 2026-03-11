@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/configlegacy"
 )
 
 var channelsCmd = &cobra.Command{
@@ -25,7 +25,7 @@ var channelsStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show channel status",
 	RunE: func(_ *cobra.Command, _ []string) error {
-		cfg, err := config.Load(config.ConfigPath())
+		cfg, err := configlegacy.Load(configlegacy.ConfigPath())
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
 		}

@@ -15,7 +15,7 @@ import (
 
 	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/channelslegacy"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/configlegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
 	"github.com/crystaldolphin/crystaldolphin/internal/heartbeat"
@@ -47,7 +47,7 @@ var gatewayStartCmd = &cobra.Command{
 }
 
 func runGatewayStart(_ *cobra.Command, _ []string) error {
-	cfg, err := config.Load(config.ConfigPath())
+	cfg, err := configlegacy.Load(configlegacy.ConfigPath())
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
@@ -170,7 +170,7 @@ var gatewayStatusCmd = &cobra.Command{
 }
 
 func pidFilePath() string {
-	return filepath.Join(config.DataDir(), "gateway.pid")
+	return filepath.Join(configlegacy.DataDir(), "gateway.pid")
 }
 
 func writePIDFile() error {

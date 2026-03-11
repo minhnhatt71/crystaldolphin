@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/configlegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/cron"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
 	"github.com/crystaldolphin/crystaldolphin/internal/shared/cmdutils"
@@ -184,7 +184,7 @@ var cronRunCmd = &cobra.Command{
 	Short: "Manually run a job",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(_ *cobra.Command, args []string) error {
-		cfg, err := config.Load(config.ConfigPath())
+		cfg, err := configlegacy.Load(configlegacy.ConfigPath())
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
 		}
@@ -232,7 +232,7 @@ func init() {
 
 // ---- helpers ---------------------------------------------------------------
 
-func cronStorePath() string { return config.DataDir() + "/cron/jobs.json" }
+func cronStorePath() string { return configlegacy.DataDir() + "/cron/jobs.json" }
 
 func formatSchedule(s cron.CronSchedule) string {
 	switch s.Kind {

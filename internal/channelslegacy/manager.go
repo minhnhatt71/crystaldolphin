@@ -6,7 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/configlegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 )
 
@@ -19,7 +19,7 @@ type Manager struct {
 // NewManager creates a Manager and initialises all enabled channels.
 // The CLIChannel is always registered; it uses consoleBus to deliver replies
 // back to the terminal when the gateway is running interactively.
-func NewManager(cfg *config.Config, buses *buslegacy.MessageBusManager) *Manager {
+func NewManager(cfg *configlegacy.Config, buses *buslegacy.MessageBusManager) *Manager {
 	m := &Manager{
 		channels:   make(map[string]schema.Channel),
 		channelBus: buses.ChannelBus(),

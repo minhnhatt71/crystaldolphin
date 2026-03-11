@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/configlegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/providers"
 )
 
@@ -17,7 +17,7 @@ var statusCmd = &cobra.Command{
 }
 
 func runStatus(_ *cobra.Command, _ []string) error {
-	cfgPath := config.ConfigPath()
+	cfgPath := configlegacy.ConfigPath()
 
 	fmt.Printf("%s crystaldolphin Status\n\n", logo)
 
@@ -28,7 +28,7 @@ func runStatus(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Printf("Config:    %s %s\n", cfgPath, cfgMark)
 
-	cfg, err := config.Load(cfgPath)
+	cfg, err := configlegacy.Load(cfgPath)
 	if err != nil {
 		fmt.Printf("  (could not load config: %v)\n", err)
 		return nil

@@ -12,7 +12,7 @@ import (
 
 	"github.com/crystaldolphin/crystaldolphin/internal/buslegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/channelslegacy"
-	"github.com/crystaldolphin/crystaldolphin/internal/config"
+	"github.com/crystaldolphin/crystaldolphin/internal/configlegacy"
 	"github.com/crystaldolphin/crystaldolphin/internal/dependency"
 	"github.com/crystaldolphin/crystaldolphin/internal/schema"
 	"github.com/crystaldolphin/crystaldolphin/internal/shared/cmdutils"
@@ -39,7 +39,7 @@ func init() {
 }
 
 func runAgent(cmd *cobra.Command, args []string) error {
-	cfg, err := config.Load(config.ConfigPath())
+	cfg, err := configlegacy.Load(configlegacy.ConfigPath())
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
